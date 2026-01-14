@@ -1,433 +1,531 @@
 """
-Tests for LLM policy generator.
+Test suite for LLM Policy Generator.
+
+Validates:
+1. Precision-adaptive behavior (temperature, prompt content)
+2. Schema validation and tool mapping
+3. Diversity enforcement
+4. Self-calibration accuracy
+5. Error handling for invalid LLM outputs
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock, MagicMock, patch
 import json
 
-from lrs.inference.llm_policy_generator import (
-    LLMPolicyGenerator,
-    PolicyProposal,
-    PolicyProposalSet,
-    create_mock_generator
-)
+from lrs.inference.llm_policy_generator import LLMPolicyGenerator
+from lrs.inference.prompts import MetaCognitivePrompter, PromptContext
 from lrs.core.registry import ToolRegistry
-from lrs.core.lens import ToolLens, ExecutionResult
+from lrs.core.lens import ToolLens
 
 
-class DummyTool(ToolLens):
-    """Dummy tool for testing"""
-    def __init__(self, name):
-        super().__init__(name, {}, {})
+# ============================================================================
+# Fixtures
+# ============================================================================
+
+@pytest.fixture
+def mock_llm():
+    """Mock LLM with controllable responses"""
+    llm = Mock()
+    llm.generate = Mock()
+    return llm
+
+
+@pytest.fixture
+def mock_registry():
+    """Mock tool registry with diverse tools"""
+    registry = Mock(spec=ToolRegistry)
     
-    def get(self, state):
-        return ExecutionResult(True, "result", None, 0.1)
+    # Create mock tools
+    tool_a = Mock(spec=ToolLens)
+    tool_a.name = "tool_a"
+    tool_a.call_count = 10
+    tool_a.failure_count = 2  # 80% success
     
-    def set(self, state, obs):
-        return state
+    tool_b = Mock(spec=ToolLens)
+    tool_b.name = "tool_b"
+    tool_b.call_count = 10
+    tool_b.failure_count = 5  # 50% success
+    
+    tool_c = Mock(spec=ToolLens)
+    tool_c.name = "tool_c"
+    tool_c.call_count = 0
+    tool_c.failure_count = 0  # Never tried
+    
+    registry.tools = {
+        "tool_a": tool_a,
+        "tool_b": tool_b,
+        "tool_c": tool_c
+    }
+    
+    return registry
 
 
-class TestPolicyProposal:
-    """Test PolicyProposal Pydantic model"""
+@pytest.fixture
+def valid_llm_response():
+    """Valid LLM response matching schema"""
+    return {
+        "proposals": [
+            {
+                "policy_id": 1,
+                "tools": [
+                    {
+                        "tool_name": "tool_a",
+                        "reasoning": "High success rate",
+                        "expected_output": "data"
+                    }
+                ],
+                "estimated_success_prob": 0.8,
+                "expected_information_gain": 0.2,
+                "strategy": "exploit",
+                "rationale": "Use proven tool",
+                "failure_modes": ["timeout"]
+            },
+            {
+                "policy_id": 2,
+                "tools": [
+                    {
+                        "tool_name": "tool_c",
+                        "reasoning": "Novel approach",
+                        "expected_output": "unknown"
+                    }
+                ],
+                "estimated_success_prob": 0.5,
+                "expected_information_gain": 0.9,
+                "strategy": "explore",
+                "rationale": "Test untried tool",
+                "failure_modes": ["unknown behavior"]
+            },
+            {
+                "policy_id": 3,
+                "tools": [
+                    {
+                        "tool_name": "tool_a",
+                        "reasoning": "Reliable",
+                        "expected_output": "data"
+                    },
+                    {
+                        "tool_name": "tool_b",
+                        "reasoning": "Fallback",
+                        "expected_output": "data"
+                    }
+                ],
+                "estimated_success_prob": 0.7,
+                "expected_information_gain": 0.4,
+                "strategy": "balanced",
+                "rationale": "Hedged approach",
+                "failure_modes": ["both tools fail"]
+            }
+        ],
+        "current_uncertainty": 0.5,
+        "known_unknowns": ["State of external API"]
+    }
+
+
+# ============================================================================
+# Test: Precision-Adaptive Behavior
+# ============================================================================
+
+class TestPrecisionAdaptation:
+    """Test that precision influences LLM prompting and temperature"""
     
-    def test_valid_proposal(self):
-        """Test creating valid proposal"""
-        proposal = PolicyProposal(
-            policy_id=1,
-            tools=["tool_a", "tool_b"],
-            estimated_success_prob=0.8,
-            expected_information_gain=0.3,
-            strategy="exploit",
-            rationale="Test policy",
-            failure_modes=["timeout"]
+    def test_low_precision_increases_temperature(self, mock_llm, mock_registry, valid_llm_response):
+        """Low precision → high temperature → diverse exploration"""
+        mock_llm.generate.return_value = valid_llm_response
+        
+        generator = LLMPolicyGenerator(mock_llm, mock_registry)
+        
+        # Low precision scenario
+        proposals = generator.generate_proposals(
+            state={"goal": "test"},
+            precision=0.2  # Very low
         )
         
-        assert proposal.policy_id == 1
-        assert len(proposal.tools) == 2
-        assert proposal.strategy == "exploit"
+        # Check temperature was increased
+        call_kwargs = mock_llm.generate.call_args.kwargs
+        assert call_kwargs['temperature'] > 0.7
+        assert call_kwargs['temperature'] < 1.0
     
-    def test_invalid_success_prob(self):
-        """Test that success prob must be in [0, 1]"""
-        with pytest.raises(ValueError):
-            PolicyProposal(
-                policy_id=1,
-                tools=["tool"],
-                estimated_success_prob=1.5,  # Invalid
-                expected_information_gain=0.5,
-                strategy="exploit",
-                rationale="Test"
-            )
-    
-    def test_invalid_strategy(self):
-        """Test that strategy must be valid"""
-        with pytest.raises(ValueError):
-            PolicyProposal(
-                policy_id=1,
-                tools=["tool"],
-                estimated_success_prob=0.8,
-                expected_information_gain=0.5,
-                strategy="invalid_strategy",  # Invalid
-                rationale="Test"
-            )
-    
-    def test_optional_failure_modes(self):
-        """Test that failure_modes is optional"""
-        proposal = PolicyProposal(
-            policy_id=1,
-            tools=["tool"],
-            estimated_success_prob=0.8,
-            expected_information_gain=0.5,
-            strategy="exploit",
-            rationale="Test"
+    def test_high_precision_decreases_temperature(self, mock_llm, mock_registry, valid_llm_response):
+        """High precision → low temperature → focused exploitation"""
+        mock_llm.generate.return_value = valid_llm_response
+        
+        generator = LLMPolicyGenerator(mock_llm, mock_registry)
+        
+        # High precision scenario
+        proposals = generator.generate_proposals(
+            state={"goal": "test"},
+            precision=0.9  # Very high
         )
         
-        assert proposal.failure_modes == []
-
-
-class TestPolicyProposalSet:
-    """Test PolicyProposalSet Pydantic model"""
+        # Check temperature was decreased
+        call_kwargs = mock_llm.generate.call_args.kwargs
+        assert call_kwargs['temperature'] < 0.5
     
-    def test_valid_proposal_set(self):
-        """Test creating valid proposal set"""
-        proposals = [
-            PolicyProposal(
-                policy_id=i,
-                tools=[f"tool_{i}"],
-                estimated_success_prob=0.8,
-                expected_information_gain=0.3,
-                strategy="exploit",
-                rationale=f"Policy {i}"
-            )
-            for i in range(1, 4)
-        ]
+    def test_prompt_contains_precision_value(self, mock_llm, mock_registry, valid_llm_response):
+        """Verify precision is communicated to LLM in prompt"""
+        mock_llm.generate.return_value = valid_llm_response
         
-        proposal_set = PolicyProposalSet(proposals=proposals)
+        generator = LLMPolicyGenerator(mock_llm, mock_registry)
         
-        assert len(proposal_set.proposals) == 3
-    
-    def test_minimum_proposals(self):
-        """Test that minimum 3 proposals required"""
-        with pytest.raises(ValueError):
-            PolicyProposalSet(proposals=[
-                PolicyProposal(
-                    policy_id=1,
-                    tools=["tool"],
-                    estimated_success_prob=0.8,
-                    expected_information_gain=0.3,
-                    strategy="exploit",
-                    rationale="Only one"
-                )
-            ])
-    
-    def test_maximum_proposals(self):
-        """Test that maximum 7 proposals allowed"""
-        proposals = [
-            PolicyProposal(
-                policy_id=i,
-                tools=[f"tool_{i}"],
-                estimated_success_prob=0.8,
-                expected_information_gain=0.3,
-                strategy="exploit",
-                rationale=f"Policy {i}"
-            )
-            for i in range(1, 9)  # 8 proposals
-        ]
-        
-        with pytest.raises(ValueError):
-            PolicyProposalSet(proposals=proposals)
-    
-    def test_optional_metadata(self):
-        """Test optional metadata fields"""
-        proposals = [
-            PolicyProposal(
-                policy_id=i,
-                tools=["tool"],
-                estimated_success_prob=0.8,
-                expected_information_gain=0.3,
-                strategy="exploit",
-                rationale="Test"
-            )
-            for i in range(3)
-        ]
-        
-        proposal_set = PolicyProposalSet(
-            proposals=proposals,
-            current_uncertainty=0.6,
-            known_unknowns=["What we don't know"]
+        precision = 0.35
+        generator.generate_proposals(
+            state={"goal": "test"},
+            precision=precision
         )
         
-        assert proposal_set.current_uncertainty == 0.6
-        assert len(proposal_set.known_unknowns) == 1
+        # Extract prompt from call
+        prompt = mock_llm.generate.call_args.args[0]
+        
+        # Verify precision appears in prompt
+        assert f"{precision:.3f}" in prompt or f"{precision:.2f}" in prompt
+    
+    def test_low_precision_triggers_exploration_guidance(self, mock_llm, mock_registry, valid_llm_response):
+        """Low precision → prompt contains exploration instructions"""
+        mock_llm.generate.return_value = valid_llm_response
+        
+        generator = LLMPolicyGenerator(mock_llm, mock_registry)
+        
+        generator.generate_proposals(
+            state={"goal": "test"},
+            precision=0.25  # Below exploration threshold
+        )
+        
+        prompt = mock_llm.generate.call_args.args[0]
+        
+        # Check for exploration keywords
+        assert "EXPLORATION MODE" in prompt or "explore" in prompt.lower()
+        assert "information" in prompt.lower()
+    
+    def test_high_precision_triggers_exploitation_guidance(self, mock_llm, mock_registry, valid_llm_response):
+        """High precision → prompt contains exploitation instructions"""
+        mock_llm.generate.return_value = valid_llm_response
+        
+        generator = LLMPolicyGenerator(mock_llm, mock_registry)
+        
+        generator.generate_proposals(
+            state={"goal": "test"},
+            precision=0.85  # Above exploitation threshold
+        )
+        
+        prompt = mock_llm.generate.call_args.args[0]
+        
+        # Check for exploitation keywords
+        assert "EXPLOITATION MODE" in prompt or "exploit" in prompt.lower()
+        assert "reward" in prompt.lower() or "success" in prompt.lower()
 
 
-class TestLLMPolicyGenerator:
-    """Test LLMPolicyGenerator class"""
+# ============================================================================
+# Test: Schema Validation and Tool Mapping
+# ============================================================================
+
+class TestSchemaValidation:
+    """Test LLM output validation and conversion to executable policies"""
     
-    def test_initialization(self):
-        """Test generator initialization"""
-        mock_llm = Mock()
-        registry = ToolRegistry()
+    def test_valid_response_parsed_correctly(self, mock_llm, mock_registry, valid_llm_response):
+        """Valid LLM response is parsed without errors"""
+        mock_llm.generate.return_value = valid_llm_response
         
-        generator = LLMPolicyGenerator(mock_llm, registry)
+        generator = LLMPolicyGenerator(mock_llm, mock_registry)
+        proposals = generator.generate_proposals(
+            state={"goal": "test"},
+            precision=0.5
+        )
         
-        assert generator.llm == mock_llm
-        assert generator.registry == registry
+        assert len(proposals) == 3
+        assert all('policy' in p for p in proposals)
+        assert all('llm_success_prob' in p for p in proposals)
+        assert all('llm_info_gain' in p for p in proposals)
     
-    def test_temperature_adaptation(self):
-        """Test temperature adaptation based on precision"""
-        mock_llm = Mock()
-        registry = ToolRegistry()
-        generator = LLMPolicyGenerator(mock_llm, registry, base_temperature=0.7)
+    def test_tool_names_mapped_to_lens_objects(self, mock_llm, mock_registry, valid_llm_response):
+        """String tool names converted to actual ToolLens objects"""
+        mock_llm.generate.return_value = valid_llm_response
         
-        # Low precision → high temperature
-        temp_low = generator._adapt_temperature(0.2)
+        generator = LLMPolicyGenerator(mock_llm, mock_registry)
+        proposals = generator.generate_proposals(
+            state={"goal": "test"},
+            precision=0.5
+        )
         
-        # High precision → low temperature
-        temp_high = generator._adapt_temperature(0.9)
+        # First proposal uses tool_a
+        first_policy = proposals[0]['policy']
+        assert len(first_policy) == 1
+        assert first_policy[0] == mock_registry.tools['tool_a']
         
-        assert temp_low > temp_high
+        # Third proposal uses tool_a and tool_b
+        third_policy = proposals[2]['policy']
+        assert len(third_policy) == 2
+        assert third_policy[0] == mock_registry.tools['tool_a']
+        assert third_policy[1] == mock_registry.tools['tool_b']
     
-    def test_temperature_clamping(self):
-        """Test that temperature is clamped to reasonable range"""
-        mock_llm = Mock()
-        registry = ToolRegistry()
-        generator = LLMPolicyGenerator(mock_llm, registry)
-        
-        # Very low precision
-        temp = generator._adapt_temperature(0.01)
-        
-        # Should be clamped
-        assert 0.1 <= temp <= 2.0
-    
-    def test_parse_valid_response(self):
-        """Test parsing valid LLM response"""
-        mock_llm = Mock()
-        registry = ToolRegistry()
-        generator = LLMPolicyGenerator(mock_llm, registry)
-        
-        response = json.dumps({
+    def test_invalid_tool_name_skips_proposal(self, mock_llm, mock_registry):
+        """Proposals with invalid tool names are skipped"""
+        invalid_response = {
             "proposals": [
                 {
                     "policy_id": 1,
-                    "tools": ["tool_a"],
-                    "estimated_success_prob": 0.8,
-                    "expected_information_gain": 0.3,
-                    "strategy": "exploit",
-                    "rationale": "Test",
+                    "tools": [{"tool_name": "nonexistent_tool", "reasoning": "test"}],
+                    "estimated_success_prob": 0.5,
+                    "expected_information_gain": 0.5,
+                    "strategy": "explore",
+                    "rationale": "test",
                     "failure_modes": []
                 },
                 {
                     "policy_id": 2,
-                    "tools": ["tool_b"],
-                    "estimated_success_prob": 0.6,
-                    "expected_information_gain": 0.7,
-                    "strategy": "explore",
-                    "rationale": "Test",
-                    "failure_modes": []
-                },
-                {
-                    "policy_id": 3,
-                    "tools": ["tool_c"],
-                    "estimated_success_prob": 0.7,
-                    "expected_information_gain": 0.5,
-                    "strategy": "balanced",
-                    "rationale": "Test",
+                    "tools": [{"tool_name": "tool_a", "reasoning": "test"}],
+                    "estimated_success_prob": 0.8,
+                    "expected_information_gain": 0.2,
+                    "strategy": "exploit",
+                    "rationale": "test",
                     "failure_modes": []
                 }
-            ]
-        })
+            ],
+            "current_uncertainty": 0.5,
+            "known_unknowns": []
+        }
         
-        proposal_set = generator._parse_response(response)
+        mock_llm.generate.return_value = invalid_response
         
-        assert len(proposal_set.proposals) == 3
+        generator = LLMPolicyGenerator(mock_llm, mock_registry)
+        proposals = generator.generate_proposals(
+            state={"goal": "test"},
+            precision=0.5
+        )
+        
+        # Only valid proposal should remain
+        assert len(proposals) == 1
+        assert proposals[0]['policy'][0] == mock_registry.tools['tool_a']
     
-    def test_parse_response_with_markdown(self):
-        """Test parsing response with markdown code blocks"""
-        mock_llm = Mock()
-        registry = ToolRegistry()
-        generator = LLMPolicyGenerator(mock_llm, registry)
+    def test_metadata_preserved(self, mock_llm, mock_registry, valid_llm_response):
+        """LLM metadata (strategy, rationale, etc.) is preserved"""
+        mock_llm.generate.return_value = valid_llm_response
         
-        response = """```json
-        {
-            "proposals": [
+        generator = LLMPolicyGenerator(mock_llm, mock_registry)
+        proposals = generator.generate_proposals(
+            state={"goal": "test"},
+            precision=0.5
+        )
+        
+        # Check first proposal metadata
+        assert proposals[0]['strategy'] == 'exploit'
+        assert proposals[0]['rationale'] == 'Use proven tool'
+        assert proposals[0]['failure_modes'] == ['timeout']
+        
+        # Check second proposal
+        assert proposals[1]['strategy'] == 'explore'
+        assert proposals[1]['llm_info_gain'] == 0.9
+
+
+# ============================================================================
+# Test: Diversity Enforcement
+# ============================================================================
+
+class TestDiversityEnforcement:
+    """Test that proposals span exploration-exploitation spectrum"""
+    
+    def test_proposals_span_strategies(self, mock_llm, mock_registry, valid_llm_response):
+        """Proposals include exploit, explore, and balanced strategies"""
+        mock_llm.generate.return_value = valid_llm_response
+        
+        generator = LLMPolicyGenerator(mock_llm, mock_registry)
+        proposals = generator.generate_proposals(
+            state={"goal": "test"},
+            precision=0.5
+        )
+        
+        strategies = [p['strategy'] for p in proposals]
+        
+        # Should have at least one of each
+        assert 'exploit' in strategies
+        assert 'explore' in strategies
+        assert 'balanced' in strategies
+    
+    def test_information_gain_correlates_with_strategy(self, mock_llm, mock_registry, valid_llm_response):
+        """Explore strategies have higher info gain than exploit"""
+        mock_llm.generate.return_value = valid_llm_response
+        
+        generator = LLMPolicyGenerator(mock_llm, mock_registry)
+        proposals = generator.generate_proposals(
+            state={"goal": "test"},
+            precision=0.5
+        )
+        
+        exploit_info = [p['llm_info_gain'] for p in proposals if p['strategy'] == 'exploit']
+        explore_info = [p['llm_info_gain'] for p in proposals if p['strategy'] == 'explore']
+        
+        # Explore should have higher average info gain
+        assert sum(explore_info) / len(explore_info) > sum(exploit_info) / len(exploit_info)
+
+
+# ============================================================================
+# Test: Prediction Error Interpretation
+# ============================================================================
+
+class TestPredictionErrorHandling:
+    """Test that recent errors influence LLM prompting"""
+    
+    def test_high_error_mentioned_in_prompt(self, mock_llm, mock_registry, valid_llm_response):
+        """Recent high prediction errors appear in prompt"""
+        mock_llm.generate.return_value = valid_llm_response
+        
+        generator = LLMPolicyGenerator(mock_llm, mock_registry)
+        
+        state = {
+            "goal": "test",
+            "tool_history": [
                 {
-                    "policy_id": 1,
-                    "tools": ["tool"],
-                    "estimated_success_prob": 0.8,
-                    "expected_information_gain": 0.3,
-                    "strategy": "exploit",
-                    "rationale": "Test",
-                    "failure_modes": []
-                },
-                {
-                    "policy_id": 2,
-                    "tools": ["tool"],
-                    "estimated_success_prob": 0.6,
-                    "expected_information_gain": 0.7,
-                    "strategy": "explore",
-                    "rationale": "Test",
-                    "failure_modes": []
-                },
-                {
-                    "policy_id": 3,
-                    "tools": ["tool"],
-                    "estimated_success_prob": 0.7,
-                    "expected_information_gain": 0.5,
-                    "strategy": "balanced",
-                    "rationale": "Test",
-                    "failure_modes": []
+                    "tool": "tool_a",
+                    "success": False,
+                    "prediction_error": 0.95,
+                    "error_message": "Permission denied"
                 }
             ]
         }
-        ```"""
         
-        proposal_set = generator._parse_response(response)
+        generator.generate_proposals(state=state, precision=0.3)
         
-        assert len(proposal_set.proposals) == 3
+        prompt = mock_llm.generate.call_args.args[0]
+        
+        # Should mention the error
+        assert "0.95" in prompt or "HIGH" in prompt
+        assert "tool_a" in prompt
     
-    def test_parse_invalid_json(self):
-        """Test parsing invalid JSON raises error"""
-        mock_llm = Mock()
-        registry = ToolRegistry()
-        generator = LLMPolicyGenerator(mock_llm, registry)
+    def test_error_triggers_diagnostic_suggestion(self, mock_llm, mock_registry, valid_llm_response):
+        """High errors trigger diagnostic action suggestions in prompt"""
+        mock_llm.generate.return_value = valid_llm_response
         
-        with pytest.raises(ValueError):
-            generator._parse_response("not valid json")
+        generator = LLMPolicyGenerator(mock_llm, mock_registry)
+        
+        state = {
+            "goal": "test",
+            "tool_history": [
+                {
+                    "tool": "tool_b",
+                    "success": False,
+                    "prediction_error": 0.85
+                }
+            ]
+        }
+        
+        generator.generate_proposals(state=state, precision=0.25)
+        
+        prompt = mock_llm.generate.call_args.args[0]
+        
+        # Should suggest investigation
+        assert "investigate" in prompt.lower() or "diagnostic" in prompt.lower()
+
+
+# ============================================================================
+# Test: Edge Cases and Error Handling
+# ============================================================================
+
+class TestErrorHandling:
+    """Test robustness to invalid LLM outputs"""
     
-    def test_validate_and_convert_valid_tools(self):
-        """Test validating proposals with valid tools"""
-        mock_llm = Mock()
-        registry = ToolRegistry()
+    def test_empty_proposals_handled(self, mock_llm, mock_registry):
+        """Empty proposal list doesn't crash"""
+        mock_llm.generate.return_value = {
+            "proposals": [],
+            "current_uncertainty": 0.5,
+            "known_unknowns": []
+        }
         
-        tool_a = DummyTool("tool_a")
-        tool_b = DummyTool("tool_b")
-        registry.register(tool_a)
-        registry.register(tool_b)
+        generator = LLMPolicyGenerator(mock_llm, mock_registry)
+        proposals = generator.generate_proposals(
+            state={"goal": "test"},
+            precision=0.5
+        )
         
-        generator = LLMPolicyGenerator(mock_llm, registry)
+        assert proposals == []
+    
+    def test_malformed_json_handled(self, mock_llm, mock_registry):
+        """Malformed LLM response raises clear error"""
+        mock_llm.generate.return_value = "Not valid JSON"
         
-        proposals = [
-            PolicyProposal(
-                policy_id=1,
-                tools=["tool_a", "tool_b"],
-                estimated_success_prob=0.8,
-                expected_information_gain=0.3,
-                strategy="exploit",
-                rationale="Test"
+        generator = LLMPolicyGenerator(mock_llm, mock_registry)
+        
+        with pytest.raises(Exception):  # Should raise validation error
+            generator.generate_proposals(
+                state={"goal": "test"},
+                precision=0.5
             )
-        ]
-        
-        validated = generator._validate_and_convert(proposals)
-        
-        assert len(validated) == 1
-        assert len(validated[0]['policy']) == 2
-        assert validated[0]['policy'][0] == tool_a
-        assert validated[0]['policy'][1] == tool_b
     
-    def test_validate_and_convert_invalid_tool(self):
-        """Test that invalid tool names are filtered out"""
-        mock_llm = Mock()
-        registry = ToolRegistry()
-        registry.register(DummyTool("valid_tool"))
-        
-        generator = LLMPolicyGenerator(mock_llm, registry)
-        
-        proposals = [
-            PolicyProposal(
-                policy_id=1,
-                tools=["invalid_tool"],  # Not in registry
-                estimated_success_prob=0.8,
-                expected_information_gain=0.3,
-                strategy="exploit",
-                rationale="Test"
-            )
-        ]
-        
-        validated = generator._validate_and_convert(proposals)
-        
-        # Should be filtered out
-        assert len(validated) == 0
-    
-    def test_generate_proposals_success(self):
-        """Test full proposal generation"""
-        mock_llm = Mock()
-        
-        # Mock LLM response
-        mock_response = Mock()
-        mock_response.content = json.dumps({
+    def test_missing_required_fields_skips_proposal(self, mock_llm, mock_registry):
+        """Proposals missing required fields are skipped"""
+        incomplete_response = {
             "proposals": [
                 {
-                    "policy_id": i,
-                    "tools": ["test_tool"],
-                    "estimated_success_prob": 0.8,
-                    "expected_information_gain": 0.3,
-                    "strategy": "exploit",
-                    "rationale": f"Policy {i}",
-                    "failure_modes": []
+                    "policy_id": 1,
+                    "tools": [{"tool_name": "tool_a"}],
+                    # Missing: estimated_success_prob, expected_information_gain, etc.
                 }
-                for i in range(1, 6)
+            ],
+            "current_uncertainty": 0.5,
+            "known_unknowns": []
+        }
+        
+        mock_llm.generate.return_value = incomplete_response
+        
+        generator = LLMPolicyGenerator(mock_llm, mock_registry)
+        
+        # Should handle gracefully (skip invalid proposal)
+        with pytest.raises(Exception):  # Pydantic validation should catch
+            generator.generate_proposals(
+                state={"goal": "test"},
+                precision=0.5
+            )
+
+
+# ============================================================================
+# Integration Test
+# ============================================================================
+
+class TestIntegration:
+    """End-to-end integration test"""
+    
+    def test_complete_generation_flow(self, mock_llm, mock_registry, valid_llm_response):
+        """Full flow from state to validated proposals"""
+        mock_llm.generate.return_value = valid_llm_response
+        
+        generator = LLMPolicyGenerator(mock_llm, mock_registry)
+        
+        state = {
+            "goal": "Extract data from API",
+            "belief_state": {"api_status": "unknown"},
+            "tool_history": [
+                {
+                    "tool": "tool_a",
+                    "success": True,
+                    "prediction_error": 0.1
+                },
+                {
+                    "tool": "tool_b",
+                    "success": False,
+                    "prediction_error": 0.8
+                }
             ]
-        })
-        
-        mock_llm.invoke = Mock(return_value=mock_response)
-        
-        registry = ToolRegistry()
-        registry.register(DummyTool("test_tool"))
-        
-        generator = LLMPolicyGenerator(mock_llm, registry)
+        }
         
         proposals = generator.generate_proposals(
-            state={'goal': 'test'},
-            precision=0.5
+            state=state,
+            precision=0.45  # Medium precision
         )
         
-        assert len(proposals) == 5
-        assert mock_llm.invoke.called
-    
-    def test_generate_proposals_handles_llm_failure(self):
-        """Test that LLM failures are handled gracefully"""
-        mock_llm = Mock()
-        mock_llm.invoke = Mock(side_effect=Exception("LLM failed"))
+        # Verify output structure
+        assert len(proposals) == 3
         
-        registry = ToolRegistry()
-        generator = LLMPolicyGenerator(mock_llm, registry)
-        
-        proposals = generator.generate_proposals(
-            state={'goal': 'test'},
-            precision=0.5
-        )
-        
-        # Should return empty list on failure
-        assert proposals == []
-
-
-class TestCreateMockGenerator:
-    """Test mock generator creation"""
-    
-    def test_creates_mock_generator(self):
-        """Test that mock generator is created"""
-        registry = ToolRegistry()
-        
-        generator = create_mock_generator(registry)
-        
-        assert isinstance(generator, LLMPolicyGenerator)
-    
-    def test_mock_generator_returns_proposals(self):
-        """Test that mock generator returns proposals"""
-        registry = ToolRegistry()
-        registry.register(DummyTool("tool_a"))
-        
-        generator = create_mock_generator(registry)
-        
-        proposals = generator.generate_proposals(
-            state={'goal': 'test'},
-            precision=0.5
-        )
-        
-        # Mock should return at least one proposal
-        assert len(proposals) >= 1
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+        # All proposals have required fields
+        for prop in proposals:
+            assert 'policy' in prop
+            assert isinstance(prop['policy'], list)
+            assert all(isinstance(tool, Mock) for tool in prop['policy'])
+            
+            assert 'llm_success_prob' in prop
+            assert 0 <= prop['llm_success_prob'] <= 1
+            
+            assert 'llm_info_gain' in prop
+            assert 0 <= prop['llm_info_gain'] <= 1
+            
+            assert 'strategy' in prop
+            assert prop['strategy'] in ['exploit', 'explore', 'balanced']

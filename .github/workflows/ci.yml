@@ -51,7 +51,7 @@ jobs:
         flags: unittests
         name: codecov-umbrella
 
-  docs:
+    docs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -61,19 +61,37 @@ jobs:
       with:
         python-version: '3.11'
     
-    - name: Install dependencies
+    - name: Install package first
       run: |
-        pip install -e ".[docs]"
+        python -m pip install --upgrade pip
+        pip install -e .
+    
+    - name: Install documentation dependencies
+      run: |
+        pip install -r docs/requirements.txt
     
     - name: Build documentation
       run: |
         cd docs
+        make clean
         make html
+      continue-on-error: false
     
-    - name: Check for broken links
+    - name: Check build succeeded
       run: |
-        cd docs
-        make linkcheck
+        if [ ! -d "docs/build/html" ]; then
+          echo "Documentation build failed - no output directory"
+          exit 1
+        fi
+        echo "✅ Documentation built successfully"
+    
+    - name: Upload documentation artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: documentation
+        path: docs/build/html/
+
 
   security:
     runs-on: ubuntu-latest

@@ -1,0 +1,2 @@
+mkdir -p docs/source/_static
+touch docs/source/_static/.gitkeep

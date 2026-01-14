@@ -1,1 +1,121 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: lrs-data-pv
+  labels:
+    app: lrs-agents
+    type: data
+spec:
+  capacity:
+    storage: 50Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: lrs-storage
+  nfs:
+    # Replace with your NFS server details
+    server: nfs-server.example.com
+    path: "/exports/lrs-data"
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: lrs-logs-pv
+  labels:
+    app: lrs-agents
+    type: logs
+spec:
+  capacity:
+    storage: 100Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: lrs-storage
+  nfs:
+    server: nfs-server.example.com
+    path: "/exports/lrs-logs"
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lrs-data-pvc
+  namespace: lrs-agents
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: lrs-storage
+  selector:
+    matchLabels:
+      type: data
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lrs-logs-pvc
+  namespace: lrs-agents
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: lrs-storage
+  selector:
+    matchLabels:
+      type: logs
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: lrs-agents
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: fast-ssd
+
+---
+# For cloud providers, use dynamic provisioning:
+
+# AWS EBS
+# apiVersion: storage.k8s.io/v1
+# kind: StorageClass
+# metadata:
+#   name: lrs-storage
+# provisioner: ebs.csi.aws.com
+# parameters:
+#   type: gp3
+#   iops: "3000"
+#   throughput: "125"
+# volumeBindingMode: WaitForFirstConsumer
+# allowVolumeExpansion: true
+
+# GCP Persistent Disk
+# apiVersion: storage.k8s.io/v1
+# kind: StorageClass
+# metadata:
+#   name: lrs-storage
+# provisioner: pd.csi.storage.gke.io
+# parameters:
+#   type: pd-ssd
+# volumeBindingMode: WaitForFirstConsumer
+# allowVolumeExpansion: true
+
+# Azure Disk
+# apiVersion: storage.k8s.io/v1
+# kind: StorageClass
+# metadata:
+#
 

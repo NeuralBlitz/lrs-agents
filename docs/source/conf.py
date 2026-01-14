@@ -32,11 +32,11 @@ templates_path = ['_templates']
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
-exclude_patterns = []
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 # -- Options for HTML output -------------------------------------------------
 html_theme = 'sphinx_rtd_theme'
-html_static_path = ['_static']
+html_static_path = []  # Empty for now, will add _static when needed
 
 html_theme_options = {
     'navigation_depth': 4,
@@ -71,11 +71,19 @@ autodoc_default_options = {
     'exclude-members': '__weakref__'
 }
 
-# Intersphinx mapping
+# Mock imports for modules that aren't needed for documentation
+autodoc_mock_imports = [
+    'redis',
+    'psycopg2',
+    'streamlit',
+    'sqlalchemy',
+]
+
+# Intersphinx mapping - FIXED
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3', None),
     'numpy': ('https://numpy.org/doc/stable/', None),
-    'langchain': ('https://python.langchain.com/docs/', None),
+    # Removed broken langchain URL
 }
 
 # MyST settings
@@ -88,3 +96,5 @@ myst_enable_extensions = [
 # nbsphinx settings
 nbsphinx_execute = 'never'
 
+# Suppress warnings
+suppress_warnings = ['ref.python']

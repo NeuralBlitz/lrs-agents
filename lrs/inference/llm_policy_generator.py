@@ -56,24 +56,27 @@ class PolicyProposal(BaseModel):
         return v
 
 
-class PolicyProposalSet(BaseModel):
-    """Complete set of policy proposals"""
+@dataclass
+class PolicyProposalSet:
+    """Set of policy proposals with metadata."""
+    
     proposals: List[PolicyProposal] = Field(
         ...,
-        min_items=3,
-        max_items=7,
-        description="List of policy proposals"
+        description="3-7 diverse policy proposals",
+        min_length=3,  # Changed from min_items (Pydantic V2)
+        max_length=7   # Changed from max_items (Pydantic V2)
     )
-    current_uncertainty: Optional[float] = Field(
-        None,
+    current_uncertainty: float = Field(
+        ..., 
+        description="Current epistemic uncertainty (1 - precision)",
         ge=0.0,
-        le=1.0,
-        description="LLM's assessment of current uncertainty"
+        le=1.0
     )
-    known_unknowns: Optional[List[str]] = Field(
+    known_unknowns: List[str] = Field(
         default_factory=list,
-        description="What we know we don't know"
+        description="Known gaps in knowledge"
     )
+
 
 
 class LLMPolicyGenerator:

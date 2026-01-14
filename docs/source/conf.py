@@ -2,6 +2,8 @@
 
 import os
 import sys
+
+# Add project root to path
 sys.path.insert(0, os.path.abspath('../../'))
 
 # -- Project information -----------------------------------------------------
@@ -32,11 +34,17 @@ templates_path = ['_templates']
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = [
+    '_build',
+    'Thumbs.db',
+    '.DS_Store',
+    'old',  # Ignore old directory
+    '**/old/**',
+]
 
 # -- Options for HTML output -------------------------------------------------
 html_theme = 'sphinx_rtd_theme'
-html_static_path = []  # Empty for now, will add _static when needed
+html_static_path = []  # Will add _static when needed
 
 html_theme_options = {
     'navigation_depth': 4,
@@ -68,22 +76,23 @@ autodoc_default_options = {
     'member-order': 'bysource',
     'special-members': '__init__',
     'undoc-members': True,
-    'exclude-members': '__weakref__'
+    'exclude-members': '__weakref__',
+    'imported-members': False,  # Don't document imported members
 }
 
-# Mock imports for modules that aren't needed for documentation
-autodoc_mock_imports = [
-    'redis',
-    'psycopg2',
-    'streamlit',
-    'sqlalchemy',
+# Continue on import errors (for CI)
+autodoc_mock_imports = []
+
+# Suppress warnings about missing imports
+suppress_warnings = [
+    'ref.python',
+    'ref.doc',
 ]
 
-# Intersphinx mapping - FIXED
+# Intersphinx mapping
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3', None),
     'numpy': ('https://numpy.org/doc/stable/', None),
-    # Removed broken langchain URL
 }
 
 # MyST settings
@@ -96,12 +105,5 @@ myst_enable_extensions = [
 # nbsphinx settings
 nbsphinx_execute = 'never'
 
-# Suppress warnings
-suppress_warnings = ['ref.python']
-# In conf.py, change:
-html_static_path = ['_static']
-
-# And add:
-html_css_files = [
-    'custom.css',
-]
+# Allow duplicate labels (temporary fix)
+autosummary_generate = True

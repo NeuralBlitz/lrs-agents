@@ -1,5 +1,4 @@
-"""
-Test suite for LLM Policy Generator.
+"""Test suite for LLM Policy Generator.
 
 Validates:
 1. Precision-adaptive behavior (temperature, prompt content)

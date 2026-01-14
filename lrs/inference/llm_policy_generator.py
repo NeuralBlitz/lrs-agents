@@ -1,124 +1,93 @@
 """LLM-based policy generation for Active Inference."""
 
+import json
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from enum import Enum
+from unittest.mock import Mock, MagicMock
 
 from pydantic import BaseModel, Field, field_validator
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import SystemMessage, HumanMessage
 
 from lrs.core.lens import ToolLens
 from lrs.core.registry import ToolRegistry
 from lrs.core.precision import PrecisionParameters
-from lrs.inference.prompts import MetaCognitivePrompter, StrategyMode
+from lrs.inference.prompts import MetaCognitivePrompter, StrategyMode, PromptContext
 
 
 class PolicyProposal(BaseModel):
-    """Single policy proposal from LLM."""
+    """A single policy proposal with metadata."""
     
-    tool_sequence: List[str] = Field(
-        ...,
-        description="Sequence of tool names to execute"
-    )
-    reasoning: str = Field(
-        ...,
-        description="Why this policy is good given current precision"
-    )
-    estimated_success_prob: float = Field(
-        ...,
-        description="Estimated P(success)",
-        ge=0.0,
-        le=1.0
-    )
-    estimated_info_gain: float = Field(
-        ...,
-        description="Expected information gain",
-        ge=0.0
-    )
-    strategy: str = Field(
-        ...,
-        description="exploitation, exploration, or balanced"
-    )
-    failure_modes: List[str] = Field(
-        default_factory=list,
-        description="Known potential failure modes"
-    )
-    
+    tool_sequence: List[str] = Field(description="Ordered list of tool names to execute")
+    reasoning: str = Field(description="Explanation of why this policy might work")
+    estimated_success_prob: float = Field(ge=0.0, le=1.0, description="Estimated probability of success")
+    estimated_info_gain: float = Field(ge=0.0, le=1.0, description="Expected information gain")
+    strategy: str = Field(description="Strategy type: exploitation, exploration, or balanced")
+    failure_modes: List[str] = Field(default_factory=list, description="Potential failure scenarios")
+
     @field_validator('strategy')
     @classmethod
-    def validate_strategy(cls, v):
-        """Validate strategy is one of the allowed modes."""
+    def validate_strategy(cls, v: str) -> str:
         valid = ['exploitation', 'exploration', 'balanced']
-        if v.lower() not in valid:
+        if v not in valid:
             raise ValueError(f"Strategy must be one of {valid}")
-        return v.lower()
+        return v
 
 
 class PolicyProposalSet(BaseModel):
-    """Set of policy proposals with metadata."""
+    """Complete set of policy proposals with metadata."""
     
-    proposals: List[PolicyProposal] = Field(
-        ...,
-        description="3-7 diverse policy proposals",
-        min_length=3,
-        max_length=7
-    )
-    current_uncertainty: float = Field(
-        ..., 
-        description="Current epistemic uncertainty (1 - precision)",
-        ge=0.0,
-        le=1.0
-    )
-    known_unknowns: List[str] = Field(
-        default_factory=list,
-        description="Known gaps in knowledge"
-    )
+    proposals: List[PolicyProposal]
+    current_uncertainty: float = Field(ge=0.0, le=1.0)
+    known_unknowns: List[str] = Field(default_factory=list)
 
 
-@dataclass
 class LLMPolicyGenerator:
     """
-    Generates policy proposals using an LLM.
+    Generates policy proposals using an LLM with Active Inference principles.
     
-    The LLM is prompted to generate diverse policies that balance
-    exploration vs exploitation based on current precision.
-    
-    Args:
-        llm: LangChain chat model to use
-        registry: Tool registry with available tools
-        prompter: Optional custom prompter (defaults to MetaCognitivePrompter)
-    
-    Example:
-        >>> from langchain_anthropic import ChatAnthropic
-        >>> llm = ChatAnthropic(model="claude-sonnet-4-20250514")
-        >>> generator = LLMPolicyGenerator(llm, registry)
-        >>> proposals = generator.generate_proposals(context, precision)
+    The generator uses meta-cognitive prompting to produce diverse policies
+    that balance exploration and exploitation based on precision parameters.
     """
     
-    llm: BaseChatModel
-    registry: ToolRegistry
-    prompter: MetaCognitivePrompter = field(default_factory=MetaCognitivePrompter)
+    def __init__(
+        self,
+        llm: BaseChatModel,
+        registry: ToolRegistry,
+        prompter: Optional[MetaCognitivePrompter] = None
+    ):
+        """
+        Initialize the policy generator.
+        
+        Args:
+            llm: Language model for generating proposals
+            registry: Tool registry for available actions
+            prompter: Optional custom prompter (creates default if None)
+        """
+        self.llm = llm
+        self.registry = registry
+        self.prompter = prompter or MetaCognitivePrompter()
     
     def generate_proposals(
         self,
         context: Dict[str, Any],
         precision: PrecisionParameters,
-        num_proposals: int = 5
+        num_proposals: int = 3
     ) -> List[Dict[str, Any]]:
         """
-        Generate policy proposals from LLM.
+        Generate policy proposals based on current context and precision.
         
         Args:
-            context: Current state and goal information
-            precision: Current precision parameters
-            num_proposals: Number of proposals to generate (3-7)
-        
+            context: Current state, goal, and history
+            precision: Precision parameters guiding exploration/exploitation
+            num_proposals: Number of proposals to generate
+            
         Returns:
             List of policy dictionaries with tools and metadata
         """
         # Generate prompt based on precision
-        prompt = self.prompter.generate_prompt(
+        prompt_context = PromptContext(
             precision=precision.value,
             available_tools=[tool.name for tool in self.registry.tools],
             goal=context.get('goal', 'Complete the task'),
@@ -126,61 +95,129 @@ class LLMPolicyGenerator:
             recent_errors=context.get('recent_errors', []),
             tool_history=context.get('tool_history', [])
         )
+        prompt = self.prompter.generate_prompt(prompt_context)
         
         # Call LLM
         messages = [
-            SystemMessage(content="You are an AI agent planning tool usage."),
-            HumanMessage(content=prompt)
+            SystemMessage(content=prompt),
+            HumanMessage(content=f"Generate {num_proposals} policy proposals.")
         ]
         
         response = self.llm.invoke(messages)
         
-        # Parse response (simplified - actual implementation would be more robust)
+        # Parse and validate response
         try:
-            # Expect JSON response with proposals
-            import json
-            data = json.loads(response.content)
+            # Extract JSON from response
+            content = response.content
+            if isinstance(content, str):
+                # Handle markdown code blocks
+                if '```json' in content:
+                    content = content.split('```json')[1].split('```')[0].strip()
+                elif '```' in content:
+                    content = content.split('```')[1].split('```')[0].strip()
             
-            # Convert to PolicyProposalSet for validation
-            proposal_set = PolicyProposalSet(**data)
-            
-            # Convert to internal format
-            proposals = []
-            for prop in proposal_set.proposals:
-                # Map tool names to ToolLens objects
-                tool_sequence = []
-                for tool_name in prop.tool_sequence:
-                    tool = self.registry.get_tool(tool_name)
-                    if tool:
-                        tool_sequence.append(tool)
-                
-                if tool_sequence:  # Only include if all tools found
-                    proposals.append({
-                        'tools': tool_sequence,
-                        'reasoning': prop.reasoning,
-                        'estimated_success_prob': prop.estimated_success_prob,
-                        'estimated_info_gain': prop.estimated_info_gain,
-                        'strategy': prop.strategy,
-                        'failure_modes': prop.failure_modes
-                    })
-            
-            return proposals[:num_proposals]
-        
+            proposal_set = PolicyProposalSet.model_validate_json(content)
         except Exception as e:
-            # Fallback: return empty list on parse error
-            print(f"Failed to parse LLM response: {e}")
-            return []
+            # Fallback to simple proposals if parsing fails
+            print(f"Warning: Failed to parse LLM response: {e}")
+            return self._create_fallback_proposals(num_proposals)
+        
+        # Convert to policy dictionaries
+        policies = []
+        for proposal in proposal_set.proposals:
+            # Get actual tool objects
+            tools = []
+            for tool_name in proposal.tool_sequence:
+                tool = self.registry.get_tool(tool_name)
+                if tool:
+                    tools.append(tool)
+            
+            if tools:  # Only include if we found valid tools
+                policies.append({
+                    'tools': tools,
+                    'reasoning': proposal.reasoning,
+                    'estimated_success': proposal.estimated_success_prob,
+                    'estimated_info_gain': proposal.estimated_info_gain,
+                    'strategy': proposal.strategy,
+                    'failure_modes': proposal.failure_modes
+                })
+        
+        return policies[:num_proposals]
+    
+    def _create_fallback_proposals(self, num_proposals: int) -> List[Dict[str, Any]]:
+        """Create simple fallback proposals when LLM parsing fails."""
+        proposals = []
+        tools = list(self.registry.tools)[:num_proposals]
+        
+        for i, tool in enumerate(tools):
+            proposals.append({
+                'tools': [tool],
+                'reasoning': f'Fallback proposal using {tool.name}',
+                'estimated_success': 0.5,
+                'estimated_info_gain': 0.5,
+                'strategy': 'balanced',
+                'failure_modes': ['Unknown - fallback proposal']
+            })
+        
+        return proposals
 
 
 def create_mock_generator(num_proposals: int = 3) -> LLMPolicyGenerator:
     """
     Create a mock policy generator for testing.
     
-    Returns generator that produces simple test proposals.
+    Args:
+        num_proposals: Number of proposals the mock should generate
+        
+    Returns:
+        Generator that produces simple test proposals.
     """
-    from unittest.mock import Mock
+    # 1. Create a valid JSON response that the mock LLM will return.
+    # This response must conform to the PolicyProposalSet schema.
+    proposals_data = []
+    tool_names = []
+    for i in range(num_proposals):
+        tool_name = f"mock_tool_{i}"
+        tool_names.append(tool_name)
+        proposals_data.append({
+            "tool_sequence": [tool_name],
+            "reasoning": f"Reasoning for using {tool_name}",
+            "estimated_success_prob": 0.85,
+            "estimated_info_gain": 0.6,
+            "strategy": "balanced",
+            "failure_modes": ["It might fail if the input is wrong."]
+        })
     
-    mock_llm = Mock()
-    mock_registry = Mock()
+    response_data = {
+        "proposals": proposals_data,
+        "current_uncertainty": 0.3,
+        "known_unknowns": ["The exact format of the API response."]
+    }
+    
+    # The response content must be a JSON string
+    json_response = json.dumps(response_data)
+    
+    # 2. Configure the mock LLM to return the JSON response.
+    mock_llm = MagicMock()
+    mock_response = MagicMock()
+    mock_response.content = json_response
+    mock_llm.invoke.return_value = mock_response
+    
+    # 3. Configure the mock ToolRegistry.
+    mock_registry = MagicMock()
+    
+    # The generate_proposals method needs `registry.get_tool` to be callable
+    # and to return a tool object for the names in our mock response.
+    # It also needs `registry.tools` to be iterable for prompt generation.
+    
+    # Create mock tools. Using MagicMock is fine for this purpose.
+    mock_tools = {}
+    for name in tool_names:
+        tool = MagicMock()
+        tool.name = name
+        mock_tools[name] = tool
+    
+    mock_registry.get_tool.side_effect = lambda name: mock_tools.get(name)
+    mock_registry.tools = list(mock_tools.values())
     
     return LLMPolicyGenerator(llm=mock_llm, registry=mock_registry)

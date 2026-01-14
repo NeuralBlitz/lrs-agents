@@ -1,8 +1,9 @@
-"""Communication mechanisms for multi-agent LRS systems."""
+"""Communication mechanisms for multi-agent LRS systems.""""""Communication mechanisms for multi-agent LRS systems."""
 
-from typing import Dict, Any, Optional, List, Callable  # Added List
+from typing import Dict, Any, Optional, List, Callable
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum  # ADD THIS LINE
 
 from lrs.core.lens import ToolLens, ExecutionResult
 from lrs.multi_agent.social_precision import SocialPrecisionTracker

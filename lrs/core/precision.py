@@ -53,6 +53,11 @@ class PrecisionParameters:
     max_precision: float = 0.99
     adaptation_threshold: float = 0.4
     
+    # Support alternative parameter names for backward compatibility
+    def __post_init__(self):
+        """Handle alternative parameter names."""
+        pass
+    
     @property
     def value(self) -> float:
         """
@@ -86,6 +91,22 @@ class PrecisionParameters:
             mode = (self.alpha - 1) / (self.alpha + self.beta - 2)
             return max(self.min_precision, min(self.max_precision, mode))
         return self.value
+    
+    # Aliases for backward compatibility
+    @property
+    def learning_rate_gain(self) -> float:
+        """Alias for gain_learning_rate."""
+        return self.gain_learning_rate
+    
+    @property
+    def learning_rate_loss(self) -> float:
+        """Alias for loss_learning_rate."""
+        return self.loss_learning_rate
+    
+    @property
+    def threshold(self) -> float:
+        """Alias for adaptation_threshold."""
+        return self.adaptation_threshold
     
     def update(self, prediction_error: float) -> float:
         """
@@ -214,6 +235,22 @@ class HierarchicalPrecision:
             )
         return self.levels[level]
     
+    # Convenience properties for direct access
+    @property
+    def abstract(self) -> float:
+        """Get abstract level precision value."""
+        return self.levels['abstract'].value
+    
+    @property
+    def planning(self) -> float:
+        """Get planning level precision value."""
+        return self.levels['planning'].value
+    
+    @property
+    def execution(self) -> float:
+        """Get execution level precision value."""
+        return self.levels['execution'].value
+    
     def update(self, level: str, prediction_error: float) -> Dict[str, float]:
         """
         Update precision at a level and propagate upward if needed.
@@ -302,6 +339,10 @@ class HierarchicalPrecision:
             level: params.value
             for level, params in self.levels.items()
         }
+    
+    def get_all(self) -> Dict[str, float]:
+        """Alias for get_all_values for backward compatibility."""
+        return self.get_all_values()
     
     def __repr__(self) -> str:
         """String representation of hierarchical precision."""

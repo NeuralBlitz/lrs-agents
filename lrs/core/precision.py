@@ -1,17 +1,9 @@
-"""
-Unit tests for Bayesian precision tracking.
+"""Precision tracking for Active Inference agents."""
 
-Tests verify:
-1. Beta distribution parameter updates are mathematically correct
-2. Hierarchical error propagation follows predictive coding principles
-3. Edge cases (zero history, extreme errors) are handled safely
-4. Statistical properties (mean, variance) match theoretical expectations
-"""
-
-import pytest
+from dataclasses import dataclass
+from typing import Dict, Optional, List, Tuple
 import numpy as np
-from scipy import stats
-
+from scipy import stats  # Used for Beta distribution
 from lrs.core.precision import PrecisionParameters, HierarchicalPrecision
 
 

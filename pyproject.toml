@@ -8,7 +8,7 @@ version = "0.2.0"
 description = "Active Inference framework for adaptive AI agents"
 readme = "README.md"
 authors = [
-    {name = "LRS Contributors", email = "nuralnexus@iclod.com"}
+    {name = "LRS Contributors", email = "nuralnexus@icloud.com"}
 ]
 license = {text = "MIT"}
 classifiers = [

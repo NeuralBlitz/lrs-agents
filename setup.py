@@ -1,11 +1,13 @@
-"""
-Setup file for backward compatibility.
+"""Setup script for lrs-agents."""
 
-Modern build uses pyproject.toml, but this file is kept for
-compatibility with tools that don't support PEP 517.
-"""
+from setuptools import setup, find_packages
 
-from setuptools import setup
-
-if __name__ == "__main__":
-    setup()
+setup(
+    name="lrs-agents",
+    version="0.2.0",
+    packages=find_packages(exclude=["tests", "tests.*", "docs", "examples"]),
+    package_data={
+        "lrs": ["py.typed"],
+    },
+    python_requires=">=3.9",
+)

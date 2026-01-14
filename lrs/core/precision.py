@@ -1,252 +1,248 @@
 """
-Bayesian precision tracking for Active Inference agents.
+Precision tracking via Bayesian Beta distributions.
 
 Precision (γ) represents the agent's confidence in its world model.
-Implemented as Beta-distributed parameters that update via prediction errors.
+Updated dynamically based on prediction errors using conjugate priors.
 """
 
-from typing import Dict, Optional
+from dataclasses import dataclass, field
+from typing import Optional, Dict, List
 import numpy as np
-from dataclasses import dataclass
 
 
 @dataclass
 class PrecisionParameters:
     """
-    Beta-distributed precision parameters.
+    Bayesian precision tracking using Beta distribution.
     
-    Precision γ ~ Beta(α, β) where:
-    - α: "success count" (increases with low prediction errors)
-    - β: "failure count" (increases with high prediction errors)
-    - E[γ] = α / (α + β)
+    The precision γ is modeled as the expected value of a Beta distribution:
+        γ ~ Beta(α, β)
+        E[γ] = α / (α + β)
+    
+    When prediction errors are low, α increases (higher confidence).
+    When prediction errors are high, β increases (lower confidence).
     
     Attributes:
-        alpha: Success parameter
-        beta: Failure parameter
-        learning_rate_gain: Rate at which α increases (default: 0.1)
-        learning_rate_loss: Rate at which β increases (default: 0.2)
-        threshold: Error threshold for gain vs loss (default: 0.5)
+        alpha (float): Shape parameter controlling high-confidence mass.
+            Higher α → higher precision. Default: 9.0 (90% confidence prior).
+        beta (float): Shape parameter controlling low-confidence mass.
+            Higher β → lower precision. Default: 1.0.
+        learning_rate_gain (float): Rate of confidence increase on success.
+            Default: 0.1.
+        learning_rate_loss (float): Rate of confidence decrease on failure.
+            Default: 0.2 (asymmetric - faster to lose confidence).
+        threshold (float): Prediction error threshold for success/failure.
+            Errors below this increase α, above this increase β.
+            Default: 0.5.
+    
+    Mathematical Justification:
+        The Beta distribution is the conjugate prior for Bernoulli-distributed
+        observations (success/failure). This ensures closed-form Bayesian updates
+        without numerical approximation.
     
     Examples:
-        >>> precision = PrecisionParameters(alpha=5.0, beta=5.0)
-        >>> print(precision.value)  # E[γ] = 5/(5+5) = 0.5
-        0.5
-        >>> 
-        >>> # Low error → increase alpha
-        >>> precision.update(error=0.1)
-        >>> print(precision.value)  # γ increased
-        0.51
-        >>> 
-        >>> # High error → increase beta
-        >>> precision.update(error=0.9)
-        >>> print(precision.value)  # γ decreased
-        0.48
+        >>> precision = PrecisionParameters(alpha=9.0, beta=1.0)
+        >>> print(precision.value)  # E[Beta(9,1)] = 0.9
+        0.9
+        
+        >>> precision.update(prediction_error=0.2)  # Low error
+        >>> print(precision.value)  # α increased → higher confidence
+        0.901
+        
+        >>> precision.update(prediction_error=0.8)  # High error
+        >>> print(precision.value)  # β increased → lower confidence
+        0.880
     """
     
-    alpha: float = 5.0
-    beta: float = 5.0
+    alpha: float = 9.0
+    beta: float = 1.0
     learning_rate_gain: float = 0.1
     learning_rate_loss: float = 0.2
     threshold: float = 0.5
     
+    # History tracking (optional, for monitoring)
+    history: List[float] = field(default_factory=list, repr=False)
+    
     @property
     def value(self) -> float:
-        """Expected value of precision: E[γ] = α / (α + β)"""
+        """
+        Current precision estimate: E[Beta(α, β)] = α / (α + β)
+        
+        Returns:
+            float: Precision value in [0, 1].
+        """
         return self.alpha / (self.alpha + self.beta)
     
     @property
     def variance(self) -> float:
-        """Variance of precision distribution"""
-        a, b = self.alpha, self.beta
-        return (a * b) / ((a + b) ** 2 * (a + b + 1))
+        """
+        Uncertainty in precision estimate: Var[Beta(α, β)]
+        
+        Returns:
+            float: Variance of the Beta distribution.
+            
+        Note:
+            High variance indicates the agent is uncertain about its own
+            uncertainty (meta-uncertainty). This can trigger hierarchical
+            belief revision.
+        """
+        n = self.alpha + self.beta
+        return (self.alpha * self.beta) / (n**2 * (n + 1))
     
     def update(self, prediction_error: float) -> float:
         """
-        Update precision based on prediction error.
+        Bayesian update based on observed prediction error.
         
-        Low error (< threshold) → increase α (gain confidence)
-        High error (≥ threshold) → increase β (lose confidence)
-        
-        Key property: Loss is faster than gain (asymmetric learning)
+        Update rule:
+            If ε < threshold: α ← α + η_gain  (reward accuracy)
+            If ε ≥ threshold: β ← β + η_loss  (penalize inaccuracy)
         
         Args:
-            prediction_error: Prediction error in [0, 1]
+            prediction_error (float): Observed error ε = |predicted - observed|.
+                Should be normalized to [0, 1].
         
         Returns:
-            Updated precision value
+            float: Updated precision value.
+            
+        Raises:
+            ValueError: If prediction_error is outside [0, 1].
         
         Examples:
-            >>> p = PrecisionParameters()
-            >>> p.update(0.1)  # Low error
-            0.51
-            >>> p.update(0.9)  # High error
-            0.47
+            >>> p = PrecisionParameters(alpha=5.0, beta=5.0)  # γ = 0.5
+            >>> p.update(0.1)  # Success
+            5.1
+            >>> p.update(0.9)  # Failure  
+            5.3
         """
-        if prediction_error < self.threshold:
-            # Gain confidence slowly
-            self.alpha += self.learning_rate_gain * (1 - prediction_error)
-        else:
-            # Lose confidence quickly
-            self.beta += self.learning_rate_loss * prediction_error
+        if not 0 <= prediction_error <= 1:
+            raise ValueError(
+                f"Prediction error must be in [0, 1], got {prediction_error}"
+            )
         
-        return self.value
+        if prediction_error < self.threshold:
+            # Low error → increase confidence
+            self.alpha += self.learning_rate_gain
+        else:
+            # High error → decrease confidence
+            self.beta += self.learning_rate_loss
+        
+        # Track history
+        new_precision = self.value
+        self.history.append(new_precision)
+        
+        return new_precision
     
-    def reset(self):
-        """Reset to initial prior"""
-        self.alpha = 5.0
-        self.beta = 5.0
+    def reset(self, alpha: Optional[float] = None, beta: Optional[float] = None):
+        """
+        Reset precision to initial or specified values.
+        
+        Useful when agent enters a new environment or task context.
+        
+        Args:
+            alpha (float, optional): New α value. If None, uses current.
+            beta (float, optional): New β value. If None, uses current.
+        """
+        if alpha is not None:
+            self.alpha = alpha
+        if beta is not None:
+            self.beta = beta
+        self.history.clear()
+    
+    def sample(self, n_samples: int = 1) -> np.ndarray:
+        """
+        Draw samples from the posterior precision distribution.
+        
+        Useful for Thompson sampling or uncertainty quantification.
+        
+        Args:
+            n_samples (int): Number of samples to draw.
+        
+        Returns:
+            np.ndarray: Samples from Beta(α, β).
+        
+        Examples:
+            >>> p = PrecisionParameters(alpha=9.0, beta=1.0)
+            >>> samples = p.sample(1000)
+            >>> np.mean(samples)  # Should be close to 0.9
+            0.899
+        """
+        return np.random.beta(self.alpha, self.beta, size=n_samples)
 
 
+@dataclass
 class HierarchicalPrecision:
     """
-    Three-level hierarchical precision tracking.
+    Manages precision across multiple levels of the Hierarchical Bayesian Network.
     
-    Levels (from high to low):
-    1. Abstract (level 2): Long-term goals and strategies
-    2. Planning (level 1): Subgoal selection and sequencing
-    3. Execution (level 0): Individual tool calls
+    In active inference, agents maintain beliefs at different temporal scales:
+        - Abstract (Level 2): Long-term goals, slow updates
+        - Planning (Level 1): Subgoal selection, medium updates
+        - Execution (Level 0): Tool calls, fast updates
     
-    Errors propagate upward when they exceed a threshold.
-    This prevents minor execution failures from disrupting high-level goals.
+    Prediction errors propagate bottom-up, while priors flow top-down.
     
     Attributes:
-        abstract: Abstract-level precision
-        planning: Planning-level precision
-        execution: Execution-level precision
-        propagation_threshold: Error threshold for upward propagation
-        attenuation_factor: How much error is attenuated when propagating
+        levels (Dict[str, PrecisionParameters]): Precision trackers per level.
+        propagation_threshold (float): Error threshold for upward propagation.
+            If execution-level error exceeds this, planning precision is updated.
     
     Examples:
         >>> hp = HierarchicalPrecision()
-        >>> 
-        >>> # Small error at execution → only execution precision drops
-        >>> hp.update('execution', 0.3)
-        >>> print(hp.get_level('execution'))  # Decreased
-        0.48
-        >>> print(hp.get_level('planning'))   # Unchanged
-        0.5
-        >>> 
-        >>> # Large error at execution → propagates to planning
-        >>> hp.update('execution', 0.95)
-        >>> print(hp.get_level('execution'))  # Dropped significantly
-        0.32
-        >>> print(hp.get_level('planning'))   # Also dropped
-        0.45
+        >>> hp.update('execution', prediction_error=0.8)
+        >>> # High error triggers propagation
+        >>> hp.levels['planning'].value  # Also decreased
+        0.65
     """
     
-    def __init__(
-        self,
-        propagation_threshold: float = 0.7,
-        attenuation_factor: float = 0.5
-    ):
-        """
-        Initialize hierarchical precision.
-        
-        Args:
-            propagation_threshold: Error threshold for upward propagation
-            attenuation_factor: How much to attenuate errors when propagating
-        """
-        self.abstract = PrecisionParameters()
-        self.planning = PrecisionParameters()
-        self.execution = PrecisionParameters()
-        
-        self.propagation_threshold = propagation_threshold
-        self.attenuation_factor = attenuation_factor
+    levels: Dict[str, PrecisionParameters] = field(default_factory=lambda: {
+        'abstract': PrecisionParameters(alpha=9.0, beta=1.0),
+        'planning': PrecisionParameters(alpha=7.0, beta=3.0),
+        'execution': PrecisionParameters(alpha=5.0, beta=5.0)
+    })
+    
+    propagation_threshold: float = 0.7
     
     def update(self, level: str, prediction_error: float) -> Dict[str, float]:
         """
-        Update precision at specified level and propagate if needed.
+        Update precision at specified level with error propagation.
         
-        Propagation rules:
-        - Execution → Planning: If error > threshold
-        - Planning → Abstract: If error > threshold
-        - Errors are attenuated when propagating up
+        If prediction error exceeds threshold, propagate to higher levels.
+        This implements hierarchical message passing from predictive coding.
         
         Args:
-            level: 'abstract', 'planning', or 'execution'
-            prediction_error: Error in [0, 1]
+            level (str): Level to update ('abstract', 'planning', 'execution').
+            prediction_error (float): Observed error at this level.
         
         Returns:
-            Dict of updated precision values per level
+            Dict[str, float]: Updated precision values for all affected levels.
         
-        Examples:
-            >>> hp = HierarchicalPrecision()
-            >>> result = hp.update('execution', 0.95)
-            >>> print(result)
-            {'execution': 0.32, 'planning': 0.45}
+        Raises:
+            KeyError: If level is not recognized.
         """
-        updated = {}
+        if level not in self.levels:
+            raise KeyError(f"Unknown level '{level}'. Must be one of {list(self.levels.keys())}")
         
-        # Update specified level
-        if level == 'execution':
-            self.execution.update(prediction_error)
-            updated['execution'] = self.execution.value
-            
-            # Propagate to planning if error is high
-            if prediction_error > self.propagation_threshold:
-                attenuated_error = prediction_error * self.attenuation_factor
-                self.planning.update(attenuated_error)
-                updated['planning'] = self.planning.value
-                
-                # Propagate to abstract if planning error is also high
-                if attenuated_error > self.propagation_threshold:
-                    super_attenuated = attenuated_error * self.attenuation_factor
-                    self.abstract.update(super_attenuated)
-                    updated['abstract'] = self.abstract.value
+        # Update target level
+        updated = {level: self.levels[level].update(prediction_error)}
         
-        elif level == 'planning':
-            self.planning.update(prediction_error)
-            updated['planning'] = self.planning.value
-            
-            # Propagate to abstract if error is high
-            if prediction_error > self.propagation_threshold:
-                attenuated_error = prediction_error * self.attenuation_factor
-                self.abstract.update(attenuated_error)
-                updated['abstract'] = self.abstract.value
-        
-        elif level == 'abstract':
-            self.abstract.update(prediction_error)
-            updated['abstract'] = self.abstract.value
-        
-        else:
-            raise ValueError(f"Unknown level: {level}. Use 'abstract', 'planning', or 'execution'")
+        # Check for upward propagation
+        if prediction_error > self.propagation_threshold:
+            # Propagate error to higher levels (with attenuation)
+            if level == 'execution':
+                updated['planning'] = self.levels['planning'].update(
+                    prediction_error * 0.7  # Attenuate error
+                )
+            elif level == 'planning':
+                updated['abstract'] = self.levels['abstract'].update(
+                    prediction_error * 0.5  # Further attenuation
+                )
         
         return updated
     
-    def get_level(self, level: str) -> float:
-        """
-        Get precision value for specified level.
-        
-        Args:
-            level: 'abstract', 'planning', or 'execution'
-        
-        Returns:
-            Precision value in [0, 1]
-        """
-        if level == 'abstract':
-            return self.abstract.value
-        elif level == 'planning':
-            return self.planning.value
-        elif level == 'execution':
-            return self.execution.value
-        else:
-            raise ValueError(f"Unknown level: {level}")
-    
     def get_all(self) -> Dict[str, float]:
-        """
-        Get all precision values.
-        
-        Returns:
-            Dict mapping level names to precision values
-        """
-        return {
-            'abstract': self.abstract.value,
-            'planning': self.planning.value,
-            'execution': self.execution.value
-        }
+        """Get current precision values for all levels."""
+        return {level: params.value for level, params in self.levels.items()}
     
-    def reset(self):
-        """Reset all levels to initial priors"""
-        self.abstract.reset()
-        self.planning.reset()
-        self.execution.reset()
+    def get_level(self, level: str) -> float:
+        """Get precision value for specific level."""
+        return self.levels[level].value

@@ -40,6 +40,9 @@ test = [
     "pytest-cov>=4.1.0",
     "pytest-asyncio>=0.21.0",
     "pytest-mock>=3.12.0",
+    "streamlit>=1.28.0",
+    "plotly>=5.18.0",
+    "matplotlib>=3.7.0",
 ]
 
 dev = [

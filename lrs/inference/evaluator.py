@@ -1,21 +1,18 @@
-"""
-Hybrid G evaluator combining LLM priors with mathematical calculations.
+"""Hybrid Expected Free Energy evaluation."""
 
-Allows LLM's semantic understanding to inform Free Energy calculations
-while maintaining mathematical rigor.
-"""
+from dataclasses import dataclass  # Add this
+from typing import List, Dict, Any, Optional, Tuple
+import json
 
-from typing import List, Dict, Any, Optional
-import numpy as np
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import HumanMessage, SystemMessage
 
+from lrs.core.lens import ToolLens
 from lrs.core.free_energy import (
     calculate_expected_free_energy,
-    calculate_epistemic_value,
-    calculate_pragmatic_value,
     PolicyEvaluation
 )
-from lrs.core.lens import ToolLens
-
+from lrs.core.precision import PrecisionParameters
 
 class HybridGEvaluator:
     """

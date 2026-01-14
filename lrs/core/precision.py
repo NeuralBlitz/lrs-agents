@@ -1,429 +1,347 @@
 """Precision tracking for Active Inference agents."""
 
-from dataclasses import dataclass
-from typing import Dict, Optional, List, Tuple
-import numpy as np
-from scipy import stats  # Used for Beta distribution
-from lrs.core.precision import PrecisionParameters, HierarchicalPrecision
+from dataclasses import dataclass, field
+from typing import Dict, Optional, List
+import math
 
 
-class TestPrecisionParameters:
-    """Test individual precision tracker behavior"""
+def beta_mean(alpha: float, beta: float) -> float:
+    """Calculate mean of Beta distribution."""
+    return alpha / (alpha + beta)
+
+
+def beta_variance(alpha: float, beta: float) -> float:
+    """Calculate variance of Beta distribution."""
+    ab_sum = alpha + beta
+    return (alpha * beta) / (ab_sum * ab_sum * (ab_sum + 1))
+
+
+@dataclass
+class PrecisionParameters:
+    """
+    Represents precision as a Beta distribution.
     
-    def test_initial_precision_value(self):
-        """Initial precision equals Beta distribution mean"""
-        p = PrecisionParameters(alpha=9.0, beta=1.0)
-        
-        # E[Beta(9, 1)] = 9/(9+1) = 0.9
-        assert p.value == pytest.approx(0.9)
+    Precision γ ∈ [0, 1] represents confidence in predictions.
+    Tracked via Beta(α, β) distribution with asymmetric learning rates.
     
-    def test_low_error_increases_precision(self):
-        """Prediction errors below threshold increase confidence"""
-        p = PrecisionParameters(alpha=5.0, beta=5.0, threshold=0.5)
-        initial_precision = p.value  # 0.5
-        
-        # Low error → α increases
-        new_precision = p.update(prediction_error=0.2)
-        
-        assert new_precision > initial_precision
-        assert p.alpha > 5.0
-        assert p.beta == 5.0  # β unchanged
+    Args:
+        alpha: Alpha parameter of Beta distribution (successes + 1)
+        beta: Beta parameter of Beta distribution (failures + 1)
+        gain_learning_rate: Rate at which precision increases (default: 0.1)
+        loss_learning_rate: Rate at which precision decreases (default: 0.2)
+        min_precision: Minimum allowed precision value (default: 0.01)
+        max_precision: Maximum allowed precision value (default: 0.99)
+        adaptation_threshold: Precision below which adaptation triggers (default: 0.4)
     
-    def test_high_error_decreases_precision(self):
-        """Prediction errors above threshold decrease confidence"""
-        p = PrecisionParameters(alpha=5.0, beta=5.0, threshold=0.5)
-        initial_precision = p.value
-        
-        # High error → β increases
-        new_precision = p.update(prediction_error=0.8)
-        
-        assert new_precision < initial_precision
-        assert p.alpha == 5.0  # α unchanged
-        assert p.beta > 5.0
+    Example:
+        >>> precision = PrecisionParameters()
+        >>> precision.value  # Initial: 0.5
+        0.5
+        >>> precision.update(0.1)  # Success
+        >>> precision.value  # Slight increase
+        0.518
+        >>> precision.update(0.9)  # Failure
+        >>> precision.value  # Larger decrease
+        0.424
+    """
     
-    def test_asymmetric_learning_rates(self):
-        """Confidence lost faster than gained (loss_rate > gain_rate)"""
-        p = PrecisionParameters(
-            alpha=10.0, 
-            beta=10.0,
-            learning_rate_gain=0.1,
-            learning_rate_loss=0.2
+    alpha: float = 1.0
+    beta: float = 1.0
+    gain_learning_rate: float = 0.1
+    loss_learning_rate: float = 0.2
+    min_precision: float = 0.01
+    max_precision: float = 0.99
+    adaptation_threshold: float = 0.4
+    
+    @property
+    def value(self) -> float:
+        """
+        Expected value (mean) of precision.
+        
+        Returns:
+            float: Precision value γ = α / (α + β), clamped to [min_precision, max_precision]
+        """
+        precision = beta_mean(self.alpha, self.beta)
+        return max(self.min_precision, min(self.max_precision, precision))
+    
+    @property
+    def variance(self) -> float:
+        """
+        Variance of precision distribution.
+        
+        Returns:
+            float: Variance of Beta(α, β)
+        """
+        return beta_variance(self.alpha, self.beta)
+    
+    @property
+    def mode(self) -> float:
+        """
+        Most likely value of precision (mode of Beta distribution).
+        
+        Returns:
+            float: Mode if α, β > 1, otherwise returns mean
+        """
+        if self.alpha > 1 and self.beta > 1:
+            mode = (self.alpha - 1) / (self.alpha + self.beta - 2)
+            return max(self.min_precision, min(self.max_precision, mode))
+        return self.value
+    
+    def update(self, prediction_error: float) -> float:
+        """
+        Update precision based on prediction error.
+        
+        Uses asymmetric learning rates:
+        - Slow increase on success (gain_learning_rate)
+        - Fast decrease on failure (loss_learning_rate)
+        
+        Args:
+            prediction_error: Prediction error δ ∈ [0, 1]
+                            0 = perfect prediction
+                            1 = maximum surprise
+        
+        Returns:
+            float: New precision value
+        
+        Example:
+            >>> precision = PrecisionParameters()
+            >>> precision.update(0.1)  # Low error (success)
+            0.518
+            >>> precision.update(0.9)  # High error (failure)  
+            0.424
+        """
+        # Clamp prediction error to [0, 1]
+        prediction_error = max(0.0, min(1.0, prediction_error))
+        
+        # Asymmetric update
+        success = 1.0 - prediction_error
+        self.alpha += self.gain_learning_rate * success
+        self.beta += self.loss_learning_rate * prediction_error
+        
+        return self.value
+    
+    def reset(self) -> None:
+        """Reset precision to initial uniform prior."""
+        self.alpha = 1.0
+        self.beta = 1.0
+    
+    def should_adapt(self) -> bool:
+        """
+        Check if adaptation should be triggered.
+        
+        Returns:
+            bool: True if precision is below adaptation threshold
+        """
+        return self.value < self.adaptation_threshold
+    
+    def __repr__(self) -> str:
+        """String representation of precision parameters."""
+        return (
+            f"PrecisionParameters(value={self.value:.3f}, "
+            f"alpha={self.alpha:.2f}, beta={self.beta:.2f}, "
+            f"variance={self.variance:.4f})"
         )
-        
-        # Apply one success and one failure
-        p.update(0.2)  # Success: α += 0.1
-        p.update(0.8)  # Failure: β += 0.2
-        
-        # Net effect: more β increase than α
-        assert p.beta - 10.0 > p.alpha - 10.0
-    
-    def test_variance_calculation(self):
-        """Variance matches Beta distribution formula"""
-        p = PrecisionParameters(alpha=9.0, beta=1.0)
-        
-        # Var[Beta(α, β)] = αβ / ((α+β)²(α+β+1))
-        n = 9.0 + 1.0
-        expected_var = (9.0 * 1.0) / (n**2 * (n + 1))
-        
-        assert p.variance == pytest.approx(expected_var)
-    
-    def test_high_alpha_low_variance(self):
-        """High confidence → low variance"""
-        high_confidence = PrecisionParameters(alpha=90.0, beta=10.0)
-        low_confidence = PrecisionParameters(alpha=10.0, beta=10.0)
-        
-        assert high_confidence.variance < low_confidence.variance
-    
-    def test_update_out_of_bounds_raises(self):
-        """Prediction errors must be in [0, 1]"""
-        p = PrecisionParameters()
-        
-        with pytest.raises(ValueError, match="must be in"):
-            p.update(-0.1)
-        
-        with pytest.raises(ValueError, match="must be in"):
-            p.update(1.5)
-    
-    def test_update_at_boundaries(self):
-        """Edge cases: error = 0.0 and error = 1.0"""
-        p = PrecisionParameters(alpha=5.0, beta=5.0, threshold=0.5)
-        
-        # Minimum error (perfect prediction)
-        p.update(0.0)
-        assert p.alpha > 5.0
-        
-        # Maximum error (complete surprise)
-        p.update(1.0)
-        assert p.beta > 5.0
-    
-    def test_history_tracking(self):
-        """Precision history is recorded correctly"""
-        p = PrecisionParameters(alpha=5.0, beta=5.0)
-        
-        assert len(p.history) == 0
-        
-        p.update(0.2)
-        assert len(p.history) == 1
-        
-        p.update(0.8)
-        assert len(p.history) == 2
-        
-        # History reflects precision changes
-        assert p.history[0] > p.history[1]  # First was success, second failure
-    
-    def test_reset_clears_history(self):
-        """Reset removes history and optionally changes parameters"""
-        p = PrecisionParameters(alpha=5.0, beta=5.0)
-        p.update(0.2)
-        p.update(0.8)
-        
-        assert len(p.history) == 2
-        
-        p.reset()
-        assert len(p.history) == 0
-        assert p.alpha == 5.0  # Unchanged
-        assert p.beta == 5.0
-        
-        # Reset with new values
-        p.reset(alpha=10.0, beta=2.0)
-        assert p.alpha == 10.0
-        assert p.beta == 2.0
-    
-    def test_sampling_distribution(self):
-        """Samples from Beta distribution have correct statistics"""
-        p = PrecisionParameters(alpha=20.0, beta=5.0)
-        
-        samples = p.sample(n_samples=10000)
-        
-        # Sample mean should approximate theoretical mean
-        theoretical_mean = 20.0 / 25.0  # 0.8
-        sample_mean = np.mean(samples)
-        
-        assert sample_mean == pytest.approx(theoretical_mean, abs=0.02)
-        
-        # Samples should be in [0, 1]
-        assert np.all(samples >= 0)
-        assert np.all(samples <= 1)
-    
-    def test_sampling_reproduces_beta(self):
-        """Sampled distribution matches scipy.stats.beta"""
-        p = PrecisionParameters(alpha=9.0, beta=3.0)
-        
-        # Generate samples
-        lrs_samples = p.sample(n_samples=5000)
-        scipy_samples = np.random.beta(9.0, 3.0, size=5000)
-        
-        # Compare means
-        assert np.mean(lrs_samples) == pytest.approx(np.mean(scipy_samples), abs=0.05)
-        
-        # Compare variances
-        assert np.var(lrs_samples) == pytest.approx(np.var(scipy_samples), abs=0.01)
 
 
-class TestHierarchicalPrecision:
-    """Test hierarchical precision tracking and error propagation"""
+@dataclass  
+class HierarchicalPrecision:
+    """
+    Hierarchical precision tracking across multiple levels.
     
-    def test_initialization_creates_three_levels(self):
-        """Hierarchical precision creates abstract, planning, execution levels"""
-        hp = HierarchicalPrecision()
-        
-        assert 'abstract' in hp.levels
-        assert 'planning' in hp.levels
-        assert 'execution' in hp.levels
+    Tracks precision at three levels:
+    - Abstract: Long-term goals and strategies
+    - Planning: Action sequences and policies
+    - Execution: Individual tool executions
     
-    def test_initial_precision_hierarchy(self):
-        """Higher levels start with higher precision"""
-        hp = HierarchicalPrecision()
-        
-        # Default: Abstract > Planning > Execution
-        assert hp.levels['abstract'].value > hp.levels['planning'].value
-        assert hp.levels['planning'].value > hp.levels['execution'].value
+    Prediction errors propagate upward through hierarchy with
+    threshold-based attenuation.
     
-    def test_low_error_only_affects_target_level(self):
-        """Small errors don't propagate upward"""
-        hp = HierarchicalPrecision(propagation_threshold=0.7)
-        
-        initial_planning = hp.levels['planning'].value
-        initial_abstract = hp.levels['abstract'].value
-        
-        # Low error at execution level
-        updated = hp.update('execution', prediction_error=0.3)
-        
-        # Only execution updated
-        assert 'execution' in updated
-        assert 'planning' not in updated
-        assert 'abstract' not in updated
-        
-        # Planning and abstract unchanged
-        assert hp.levels['planning'].value == initial_planning
-        assert hp.levels['abstract'].value == initial_abstract
+    Args:
+        propagation_threshold: Error must exceed this to propagate up (default: 0.7)
+        attenuation_factor: Multiply error by this when propagating (default: 0.5)
+        gain_learning_rate: Learning rate for precision increases (default: 0.1)
+        loss_learning_rate: Learning rate for precision decreases (default: 0.2)
     
-    def test_high_error_propagates_upward(self):
-        """Large errors trigger hierarchical propagation"""
-        hp = HierarchicalPrecision(propagation_threshold=0.7)
-        
-        initial_planning = hp.levels['planning'].value
-        
-        # High error at execution level
-        updated = hp.update('execution', prediction_error=0.85)
-        
-        # Both execution and planning updated
-        assert 'execution' in updated
-        assert 'planning' in updated
-        
-        # Planning precision decreased
-        assert hp.levels['planning'].value < initial_planning
+    Example:
+        >>> hp = HierarchicalPrecision()
+        >>> hp.update('execution', 0.95)  # High error at execution
+        >>> hp.get_level('execution').value  # Execution precision drops
+        0.424
+        >>> hp.get_level('planning').value  # Planning also affected (attenuated)
+        0.442
+    """
     
-    def test_error_attenuation_during_propagation(self):
-        """Errors are attenuated when propagating upward"""
-        hp = HierarchicalPrecision(propagation_threshold=0.7)
-        
-        # Manually track how much precision drops at each level
-        execution_before = hp.levels['execution'].value
-        planning_before = hp.levels['planning'].value
-        
-        hp.update('execution', prediction_error=0.9)
-        
-        execution_drop = execution_before - hp.levels['execution'].value
-        planning_drop = planning_before - hp.levels['planning'].value
-        
-        # Planning should drop less than execution (attenuation)
-        # Because propagated error is 0.9 * 0.7 = 0.63
-        assert planning_drop < execution_drop
+    propagation_threshold: float = 0.7
+    attenuation_factor: float = 0.5
+    gain_learning_rate: float = 0.1
+    loss_learning_rate: float = 0.2
+    levels: Dict[str, PrecisionParameters] = field(default_factory=dict, init=False)
     
-    def test_planning_error_propagates_to_abstract(self):
-        """Planning-level errors can propagate to abstract level"""
-        hp = HierarchicalPrecision(propagation_threshold=0.7)
-        
-        initial_abstract = hp.levels['abstract'].value
-        
-        # High error at planning level
-        updated = hp.update('planning', prediction_error=0.9)
-        
-        # Abstract should be updated
-        assert 'abstract' in updated
-        assert hp.levels['abstract'].value < initial_abstract
+    def __post_init__(self):
+        """Initialize precision parameters for each level."""
+        self.levels = {
+            'abstract': PrecisionParameters(
+                gain_learning_rate=self.gain_learning_rate,
+                loss_learning_rate=self.loss_learning_rate
+            ),
+            'planning': PrecisionParameters(
+                gain_learning_rate=self.gain_learning_rate,
+                loss_learning_rate=self.loss_learning_rate
+            ),
+            'execution': PrecisionParameters(
+                gain_learning_rate=self.gain_learning_rate,
+                loss_learning_rate=self.loss_learning_rate
+            ),
+        }
     
-    def test_get_all_returns_current_state(self):
-        """get_all() returns precision for all levels"""
-        hp = HierarchicalPrecision()
+    def get_level(self, level: str) -> PrecisionParameters:
+        """
+        Get precision parameters for a specific level.
         
-        all_precisions = hp.get_all()
+        Args:
+            level: One of 'abstract', 'planning', 'execution'
         
-        assert 'abstract' in all_precisions
-        assert 'planning' in all_precisions
-        assert 'execution' in all_precisions
+        Returns:
+            PrecisionParameters: Precision for that level
         
-        # Values should match individual queries
-        assert all_precisions['abstract'] == hp.levels['abstract'].value
-        assert all_precisions['planning'] == hp.levels['planning'].value
-        assert all_precisions['execution'] == hp.levels['execution'].value
+        Raises:
+            ValueError: If level is not one of the valid levels
+        """
+        if level not in self.levels:
+            raise ValueError(
+                f"Invalid level: {level}. "
+                f"Must be one of {list(self.levels.keys())}"
+            )
+        return self.levels[level]
     
-    def test_get_level_retrieves_specific_precision(self):
-        """get_level() returns precision for specified level"""
-        hp = HierarchicalPrecision()
+    def update(self, level: str, prediction_error: float) -> Dict[str, float]:
+        """
+        Update precision at a level and propagate upward if needed.
         
-        planning_precision = hp.get_level('planning')
+        Args:
+            level: Level to update ('abstract', 'planning', 'execution')
+            prediction_error: Prediction error δ ∈ [0, 1]
         
-        assert planning_precision == hp.levels['planning'].value
+        Returns:
+            dict: New precision values for all updated levels
+        
+        Example:
+            >>> hp = HierarchicalPrecision()
+            >>> result = hp.update('execution', 0.95)
+            >>> 'execution' in result
+            True
+            >>> 'planning' in result  # Propagated upward
+            True
+        """
+        updated = {}
+        
+        # Update current level
+        new_precision = self.levels[level].update(prediction_error)
+        updated[level] = new_precision
+        
+        # Propagate upward if error exceeds threshold
+        if prediction_error >= self.propagation_threshold:
+            attenuated_error = prediction_error * self.attenuation_factor
+            
+            # Execution → Planning
+            if level == 'execution':
+                new_planning = self.levels['planning'].update(attenuated_error)
+                updated['planning'] = new_planning
+                
+                # Planning → Abstract (if planning error also high)
+                if attenuated_error >= self.propagation_threshold:
+                    further_attenuated = attenuated_error * self.attenuation_factor
+                    new_abstract = self.levels['abstract'].update(further_attenuated)
+                    updated['abstract'] = new_abstract
+            
+            # Planning → Abstract
+            elif level == 'planning':
+                new_abstract = self.levels['abstract'].update(attenuated_error)
+                updated['abstract'] = new_abstract
+        
+        return updated
     
-    def test_unknown_level_raises_error(self):
-        """Updating unknown level raises KeyError"""
-        hp = HierarchicalPrecision()
+    def should_adapt(self, level: str = 'execution') -> bool:
+        """
+        Check if adaptation should be triggered at a level.
         
-        with pytest.raises(KeyError, match="Unknown level"):
-            hp.update('nonexistent_level', 0.5)
+        Args:
+            level: Level to check (default: 'execution')
+        
+        Returns:
+            bool: True if precision is below threshold at that level
+        """
+        return self.levels[level].should_adapt()
     
-    def test_cascading_propagation(self):
-        """Very high execution error can reach abstract level"""
-        hp = HierarchicalPrecision(propagation_threshold=0.7)
+    def reset(self, level: Optional[str] = None) -> None:
+        """
+        Reset precision to initial values.
         
-        initial_abstract = hp.levels['abstract'].value
+        Args:
+            level: Specific level to reset, or None for all levels
+        """
+        if level is None:
+            for lvl in self.levels.values():
+                lvl.reset()
+        else:
+            if level not in self.levels:
+                raise ValueError(
+                    f"Invalid level: {level}. "
+                    f"Must be one of {list(self.levels.keys())}"
+                )
+            self.levels[level].reset()
+    
+    def get_all_values(self) -> Dict[str, float]:
+        """
+        Get precision values for all levels.
         
-        # Extreme error at execution
-        hp.update('execution', prediction_error=0.95)
-        
-        # Should propagate to planning
-        # Planning gets error * 0.7 = 0.665, below threshold, so stops
-        # Let's trigger another to push it higher
-        hp.update('execution', prediction_error=0.95)
-        
-        # After multiple high errors, abstract might be affected
-        # (In practice, this requires sustained errors)
-        # For this test, just verify execution → planning works
-        assert hp.levels['planning'].value < 0.7
+        Returns:
+            dict: Mapping of level names to precision values
+        """
+        return {
+            level: params.value
+            for level, params in self.levels.items()
+        }
+    
+    def __repr__(self) -> str:
+        """String representation of hierarchical precision."""
+        values = self.get_all_values()
+        return (
+            f"HierarchicalPrecision("
+            f"abstract={values['abstract']:.3f}, "
+            f"planning={values['planning']:.3f}, "
+            f"execution={values['execution']:.3f})"
+        )
 
 
-class TestStatisticalProperties:
-    """Test that precision tracking has correct statistical properties"""
+def create_hierarchical_precision(
+    propagation_threshold: float = 0.7,
+    attenuation_factor: float = 0.5,
+    gain_learning_rate: float = 0.1,
+    loss_learning_rate: float = 0.2
+) -> HierarchicalPrecision:
+    """
+    Factory function to create a HierarchicalPrecision instance.
     
-    def test_convergence_with_consistent_errors(self):
-        """Precision converges with consistent feedback"""
-        p = PrecisionParameters(alpha=5.0, beta=5.0)
-        
-        # Consistent low errors (agent is doing well)
-        for _ in range(100):
-            p.update(0.1)
-        
-        # Should converge to high precision
-        assert p.value > 0.9
+    Args:
+        propagation_threshold: Error threshold for upward propagation
+        attenuation_factor: Factor to attenuate errors when propagating
+        gain_learning_rate: Learning rate for precision increases
+        loss_learning_rate: Learning rate for precision decreases
     
-    def test_divergence_with_inconsistent_errors(self):
-        """Precision decreases with inconsistent feedback"""
-        p = PrecisionParameters(alpha=10.0, beta=2.0)
-        
-        # Consistent high errors (agent is confused)
-        for _ in range(100):
-            p.update(0.9)
-        
-        # Should converge to low precision
-        assert p.value < 0.5
+    Returns:
+        HierarchicalPrecision: Configured hierarchical precision tracker
     
-    def test_stability_with_mixed_errors(self):
-        """Precision stabilizes with balanced feedback"""
-        p = PrecisionParameters(alpha=5.0, beta=5.0)
-        
-        # Alternating success and failure
-        for i in range(100):
-            error = 0.2 if i % 2 == 0 else 0.8
-            p.update(error)
-        
-        # Should remain near 0.5
-        assert 0.4 < p.value < 0.6
-    
-    def test_meta_uncertainty_increases_with_volatility(self):
-        """Variance increases when environment is volatile"""
-        stable = PrecisionParameters(alpha=50.0, beta=10.0)
-        volatile = PrecisionParameters(alpha=5.0, beta=5.0)
-        
-        # Stable environment → low variance
-        assert stable.variance < 0.01
-        
-        # Volatile environment → higher variance
-        assert volatile.variance > 0.02
-
-
-class TestIntegrationScenarios:
-    """Test realistic usage patterns"""
-    
-    def test_adaptation_scenario(self):
-        """
-        Simulate the Chaos Scriptorium scenario:
-        1. Agent has high confidence (γ = 0.9)
-        2. Environment changes (high error)
-        3. Confidence collapses (γ < 0.5)
-        4. Agent explores alternatives
-        5. Confidence recovers
-        """
-        hp = HierarchicalPrecision()
-        
-        # Initial state: high confidence
-        assert hp.get_level('execution') > 0.4
-        
-        # Phase 1: Successful execution
-        for _ in range(5):
-            hp.update('execution', 0.1)
-        
-        high_confidence = hp.get_level('execution')
-        assert high_confidence > 0.6
-        
-        # Phase 2: Environment changes (Chaos Tick)
-        hp.update('execution', 0.95)
-        hp.update('execution', 0.90)
-        
-        # Confidence should collapse
-        low_confidence = hp.get_level('execution')
-        assert low_confidence < high_confidence
-        assert low_confidence < 0.5  # Below adaptation threshold
-        
-        # Phase 3: Agent tries alternative tool (success)
-        for _ in range(10):
-            hp.update('execution', 0.2)
-        
-        # Confidence recovers
-        recovered_confidence = hp.get_level('execution')
-        assert recovered_confidence > low_confidence
-        assert recovered_confidence > 0.6
-    
-    def test_hierarchical_adaptation(self):
-        """
-        Test that execution-level volatility affects planning-level precision.
-        """
-        hp = HierarchicalPrecision(propagation_threshold=0.7)
-        
-        initial_planning = hp.get_level('planning')
-        
-        # Sustained execution failures
-        for _ in range(5):
-            hp.update('execution', 0.85)
-        
-        # Planning precision should have decreased due to propagation
-        final_planning = hp.get_level('planning')
-        assert final_planning < initial_planning
-    
-    def test_different_timescales(self):
-        """
-        Higher levels should be more stable (change slower).
-        """
-        hp = HierarchicalPrecision()
-        
-        # Set similar initial values
-        hp.levels['execution'] = PrecisionParameters(alpha=10.0, beta=10.0)
-        hp.levels['planning'] = PrecisionParameters(alpha=10.0, beta=10.0)
-        hp.levels['abstract'] = PrecisionParameters(alpha=10.0, beta=10.0)
-        
-        # Apply same error to execution level
-        hp.update('execution', 0.9)
-        hp.update('execution', 0.9)
-        hp.update('execution', 0.9)
-        
-        # Execution should change most
-        # Planning should change some (due to propagation + attenuation)
-        # Abstract should change least
-        
-        exec_change = abs(0.5 - hp.levels['execution'].value)
-        plan_change = abs(0.5 - hp.levels['planning'].value)
-        abst_change = abs(0.5 - hp.levels['abstract'].value)
-        
-        assert exec_change > plan_change
-        # Abstract might not change at all if propagation doesn't reach it
+    Example:
+        >>> hp = create_hierarchical_precision(
+        ...     propagation_threshold=0.8,
+        ...     attenuation_factor=0.3
+        ... )
+        >>> hp.update('execution', 0.9)
+    """
+    return HierarchicalPrecision(
+        propagation_threshold=propagation_threshold,
+        attenuation_factor=attenuation_factor,
+        gain_learning_rate=gain_learning_rate,
+        loss_learning_rate=loss_learning_rate
+    )

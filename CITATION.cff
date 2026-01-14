@@ -1,1 +1,7 @@
-
+@software{lrs_agents_2025,
+  title={LRS-Agents: Active Inference for Adaptive AI},
+  author={LRS Contributors},
+  year={2025},
+  url={https://github.com/NeuralBlitz/lrs-agents},
+  version={0.2.0}
+}

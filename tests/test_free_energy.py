@@ -1,20 +1,19 @@
-"""
-Tests for Expected Free Energy calculations.
-"""
+"""Tests for free energy calculations."""
 
 import pytest
 import numpy as np
+from typing import Dict
 
 from lrs.core.free_energy import (
     calculate_epistemic_value,
     calculate_pragmatic_value,
     calculate_expected_free_energy,
-    evaluate_policy,
+    # evaluate_policy,  # REMOVE THIS LINE
     precision_weighted_selection,
-    PolicyEvaluation
+    PolicyEvaluation,
 )
 from lrs.core.lens import ToolLens, ExecutionResult
-
+from lrs.core.registry import ToolRegistry
 
 class MockTool(ToolLens):
     """Mock tool for testing"""

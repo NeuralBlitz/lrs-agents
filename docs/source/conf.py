@@ -18,6 +18,8 @@ MOCK_MODULES = [
     'plotly',
     'plotly.graph_objects',
     'plotly.express',
+    'seaborn',
+    'pandas',
 ]
 
 for mod_name in MOCK_MODULES:
@@ -31,6 +33,8 @@ release = '0.2.0'
 version = '0.2.0'
 
 # -- General configuration ---------------------------------------------------
+
+# Core extensions that must be present
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
@@ -41,8 +45,14 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx_rtd_theme',
     'myst_parser',
-    'nbsphinx',
 ]
+
+# Optional extensions - add if available
+try:
+    import nbsphinx
+    extensions.append('nbsphinx')
+except ImportError:
+    pass  # nbsphinx is optional
 
 templates_path = ['_templates']
 
@@ -52,6 +62,7 @@ exclude_patterns = [
     '.DS_Store',
     'old',
     '**/old/**',
+    '*.ipynb_checkpoints',
 ]
 
 # -- Options for HTML output -------------------------------------------------
@@ -105,8 +116,10 @@ myst_enable_extensions = [
     "html_image",
 ]
 
-# nbsphinx settings
-nbsphinx_execute = 'never'
+# nbsphinx settings (only if nbsphinx is available)
+if 'nbsphinx' in extensions:
+    nbsphinx_execute = 'never'
+    nbsphinx_allow_errors = True
 
 # Autosummary
 autosummary_generate = True

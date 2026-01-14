@@ -1,18 +1,17 @@
-"""
-LLM-based policy generation for LRS-Agents.
+"""LLM-based policy generation for Active Inference."""
 
-Uses LLMs as variational proposal mechanisms - the LLM generates
-diverse policy candidates, which are then evaluated via Expected Free Energy.
-"""
+from dataclasses import dataclass, field  # Add dataclass here
+from typing import List, Dict, Any, Optional
+from enum import Enum
 
-from typing import List, Dict, Any, Optional, Callable
-import json
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import HumanMessage, SystemMessage
 
-from lrs.inference.prompts import MetaCognitivePrompter, PromptContext
-from lrs.core.registry import ToolRegistry
 from lrs.core.lens import ToolLens
-
+from lrs.core.registry import ToolRegistry
+from lrs.core.precision import PrecisionParameters
+from lrs.inference.prompts import MetaCognitivePrompter, StrategyMode
 
 # Pydantic schemas for structured outputs
 

@@ -98,3 +98,10 @@ nbsphinx_execute = 'never'
 
 # Suppress warnings
 suppress_warnings = ['ref.python']
+# In conf.py, change:
+html_static_path = ['_static']
+
+# And add:
+html_css_files = [
+    'custom.css',
+]

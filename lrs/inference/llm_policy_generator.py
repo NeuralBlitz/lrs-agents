@@ -1,10 +1,10 @@
 """LLM-based policy generation for Active Inference."""
 
-from dataclasses import dataclass, field  # Add dataclass here
+from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from enum import Enum
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator  # Add field_validator
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -13,57 +13,56 @@ from lrs.core.registry import ToolRegistry
 from lrs.core.precision import PrecisionParameters
 from lrs.inference.prompts import MetaCognitivePrompter, StrategyMode
 
-# Pydantic schemas for structured outputs
-
-class ToolCall(BaseModel):
-    """Single tool call in a policy"""
-    tool_name: str
-    description: Optional[str] = None
-
 
 class PolicyProposal(BaseModel):
-    """Single policy proposal from LLM"""
-    policy_id: int = Field(..., description="Unique policy identifier")
-    tools: List[str] = Field(..., description="List of tool names in execution order")
-    estimated_success_prob: float = Field(
-        ..., 
-        ge=0.0, 
-        le=1.0,
-        description="Estimated probability of success"
-    )
-    expected_information_gain: float = Field(
+    """Single policy proposal from LLM."""
+    
+    tool_sequence: List[str] = Field(
         ...,
+        description="Sequence of tool names to execute"
+    )
+    reasoning: str = Field(
+        ...,
+        description="Why this policy is good given current precision"
+    )
+    estimated_success_prob: float = Field(
+        ...,
+        description="Estimated P(success)",
         ge=0.0,
-        le=1.0,
-        description="Expected information gain (epistemic value)"
+        le=1.0
+    )
+    estimated_info_gain: float = Field(
+        ...,
+        description="Expected information gain",
+        ge=0.0
     )
     strategy: str = Field(
         ...,
-        description="Strategy type: exploit, explore, or balanced"
+        description="exploitation, exploration, or balanced"
     )
-    rationale: str = Field(..., description="Explanation for this policy")
     failure_modes: List[str] = Field(
         default_factory=list,
-        description="Potential failure scenarios"
+        description="Known potential failure modes"
     )
     
-    @validator('strategy')
+    @field_validator('strategy')  # Changed from @validator
+    @classmethod
     def validate_strategy(cls, v):
-        """Ensure strategy is valid"""
-        if v not in ['exploit', 'explore', 'balanced']:
-            raise ValueError(f"Strategy must be exploit, explore, or balanced, got {v}")
-        return v
+        """Validate strategy is one of the allowed modes."""
+        valid = ['exploitation', 'exploration', 'balanced']
+        if v.lower() not in valid:
+            raise ValueError(f"Strategy must be one of {valid}")
+        return v.lower()
 
 
-@dataclass
-class PolicyProposalSet:
+class PolicyProposalSet(BaseModel):
     """Set of policy proposals with metadata."""
     
     proposals: List[PolicyProposal] = Field(
         ...,
         description="3-7 diverse policy proposals",
-        min_length=3,  # Changed from min_items (Pydantic V2)
-        max_length=7   # Changed from max_items (Pydantic V2)
+        min_length=3,  # Pydantic V2
+        max_length=7   # Pydantic V2
     )
     current_uncertainty: float = Field(
         ..., 
@@ -74,6 +73,11 @@ class PolicyProposalSet:
     known_unknowns: List[str] = Field(
         default_factory=list,
         description="Known gaps in knowledge"
+    )
+
+
+# ... rest of file unchanged
+
     )
 
 

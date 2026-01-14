@@ -1,1 +1,154 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: lrs-api-service
+  namespace: lrs-agents
+  labels:
+    app: lrs-agents
+    component: api
+spec:
+  type: ClusterIP
+  selector:
+    app: lrs-agents
+    component: api
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  sessionAffinity: ClientIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lrs-dashboard-service
+  namespace: lrs-agents
+  labels:
+    app: lrs-agents
+    component: dashboard
+spec:
+  type: ClusterIP
+  selector:
+    app: lrs-agents
+    component: dashboard
+  ports:
+  - name: http
+    port: 8501
+    targetPort: 8501
+    protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: lrs-agents
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432
+    protocol: TCP
+  clusterIP: None  # Headless service for StatefulSet
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: lrs-agents
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  selector:
+    app: redis
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+    protocol: TCP
+
+---
+# LoadBalancer service for external access
+apiVersion: v1
+kind: Service
+metadata:
+  name: lrs-agents-external
+  namespace: lrs-agents
+  labels:
+    app: lrs-agents
+  annotations:
+    # AWS annotations
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    # GCP annotations
+    cloud.google.com/neg: '{"ingress": true}'
+    # Azure annotations
+    service.beta.kubernetes.io/azure-load-balancer-internal: "false"
+spec:
+  type: LoadBalancer
+  selector:
+    app: lrs-agents
+    component: api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 8000
+    protocol: TCP
+
+---
+# Ingress for advanced routing
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lrs-agents-ingress
+  namespace: lrs-agents
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+spec:
+  tls:
+  - hosts:
+    - api.lrs-agents.example.com
+    - dashboard.lrs-agents.example.com
+    secretName: lrs-agents-tls
+  rules:
+  - host: api.lrs-agents.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: lrs-api-service
+            port:
+              number: 8000
+  - host: dashboard.lrs-agents.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: lrs-dashboard-service
+            port:
+              number: 8501
 

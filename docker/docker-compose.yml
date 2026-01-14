@@ -1,1 +1,159 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    container_name: lrs-postgres
+    environment:
+      POSTGRES_USER: lrs_user
+      POSTGRES_PASSWORD: lrs_password
+      POSTGRES_DB: lrs_agents
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lrs_user -d lrs_agents"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lrs-network
+
+  # Redis cache (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: lrs-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lrs-network
+
+  # LRS-Agents API server
+  lrs-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: lrs-api
+    command: server
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://lrs_user:lrs_password@postgres:5432/lrs_agents
+      - REDIS_URL=redis://redis:6379/0
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - WAIT_FOR_DB=true
+      - DB_HOST=postgres
+      - DB_PORT=5432
+    volumes:
+      - ../lrs:/app/lrs:ro
+      - ../examples:/app/examples:ro
+      - logs:/app/logs
+      - data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - lrs-network
+
+  # Streamlit dashboard
+  lrs-dashboard:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: lrs-dashboard
+    command: dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      - DATABASE_URL=postgresql://lrs_user:lrs_password@postgres:5432/lrs_agents
+      - PORT=8501
+    volumes:
+      - ../lrs:/app/lrs:ro
+      - logs:/app/logs:ro
+      - data:/app/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - lrs-network
+
+  # Worker (for background tasks)
+  lrs-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: lrs-worker
+    command: worker
+    environment:
+      - DATABASE_URL=postgresql://lrs_user:lrs_password@postgres:5432/lrs_agents
+      - REDIS_URL=redis://redis:6379/0
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ../lrs:/app/lrs:ro
+      - logs:/app/logs
+      - data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - lrs-network
+
+  # Nginx reverse proxy (optional)
+  nginx:
+    image: nginx:alpine
+    container_name: lrs-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - lrs-api
+      - lrs-dashboard
+    restart: unless-stopped
+    networks:
+      - lrs-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  logs:
+    driver: local
+  data:
+    driver: local
+
+networks:
+  lrs-network:
+    driver: bridge
 

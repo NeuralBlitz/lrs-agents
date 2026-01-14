@@ -1,7 +1,17 @@
-@software{lrs_agents_2025,
-  title={LRS-Agents: Active Inference for Adaptive AI},
-  author={LRS Contributors},
-  year={2025},
-  url={https://github.com/NeuralBlitz/lrs-agents},
-  version={0.2.0}
-}
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "LRS Contributors"
+title: "LRS-Agents: Active Inference for Adaptive AI"
+version: 0.2.0
+date-released: 2025-01-15
+url: "https://github.com/NeuralBlitz/lrs-agents"
+repository-code: "https://github.com/NeuralBlitz/lrs-agents"
+keywords:
+  - active-inference
+  - ai-agents
+  - adaptive-systems
+  - free-energy-principle
+  - bayesian-inference
+  - langgraph
+license: MIT

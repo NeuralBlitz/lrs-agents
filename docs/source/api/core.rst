@@ -1,132 +1,158 @@
-Core API
-========
+LRS-Agents Documentation
+========================
 
-The core module provides the fundamental building blocks for LRS agents: precision tracking, free energy calculation, tool lenses, and the tool registry.
+**LRS-Agents** is a Python framework for building resilient AI agents using Active Inference and Predictive Processing. Agents automatically adapt when tools fail, tracking precision (confidence) across hierarchical levels and exploring alternatives when surprises occur.
 
-Precision Tracking
-------------------
+.. toctree::
+   :maxdepth: 2
+   :caption: Getting Started
 
-.. automodule:: lrs.core.precision
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   getting_started/installation
+   getting_started/quickstart
+   getting_started/core_concepts
 
-Classes
-^^^^^^^
+.. toctree::
+   :maxdepth: 2
+   :caption: User Guides
 
-.. autoclass:: lrs.core.precision.PrecisionParameters
-   :members:
-   :special-members: __init__
-   :show-inheritance:
+   guides/langchain_integration
+   guides/openai_assistants
+   guides/autogpt_integration
+   guides/production_deployment
 
-   Bayesian precision tracking using Beta distribution.
+.. toctree::
+   :maxdepth: 2
+   :caption: API Reference
 
-   The precision parameter γ (gamma) represents the agent's confidence in its world model.
-   It is tracked using a Beta distribution with parameters α (alpha) and β (beta).
+   api/core
+   api/inference
+   api/integration
+   api/monitoring
 
-   **Key Methods:**
+.. toctree::
+   :maxdepth: 2
+   :caption: Theory
 
-   .. automethod:: update
-   .. automethod:: reset
+   theory/active_inference
+   theory/free_energy
+   theory/precision_dynamics
 
-   **Properties:**
+.. toctree::
+   :maxdepth: 2
+   :caption: Tutorials
 
-   .. autoproperty:: value
-   .. autoproperty:: variance
+   tutorials/01_quickstart
+   tutorials/02_understanding_precision
+   tutorials/03_tool_composition
+   tutorials/04_chaos_scriptorium
 
-   **Example:**
-
-   .. code-block:: python
-
-      from lrs.core.precision import PrecisionParameters
-
-      # Initialize with default priors
-      precision = PrecisionParameters()
-      
-      # Update with low prediction error (success)
-      new_value = precision.update(prediction_error=0.1)
-      # Precision increases: 0.5 → 0.55
-      
-      # Update with high prediction error (failure)
-      new_value = precision.update(prediction_error=0.9)
-      # Precision decreases: 0.55 → 0.45
-
-.. autoclass:: lrs.core.precision.HierarchicalPrecision
-   :members:
-   :special-members: __init__
-   :show-inheritance:
-
-   Multi-level precision tracking across hierarchical belief states.
-
-   Tracks precision at three levels:
-   
-   * **Abstract**: High-level goals and strategies
-   * **Planning**: Action sequences and policies
-   * **Execution**: Individual tool executions
-
-   Errors propagate upward when they exceed a threshold, with attenuation at each level.
-
-   **Key Methods:**
-
-   .. automethod:: update
-   .. automethod:: get_level
-   .. automethod:: get_all
-   .. automethod:: reset
-
-   **Example:**
-
-   .. code-block:: python
-
-      from lrs.core.precision import HierarchicalPrecision
-
-      hp = HierarchicalPrecision()
-      
-      # High error at execution level
-      updated = hp.update('execution', prediction_error=0.95)
-      
-      # Error propagates to planning if above threshold
-      if 'planning' in updated:
-          print("Planning precision also updated!")
-
-Free Energy
+Quick Links
 -----------
 
-.. automodule:: lrs.core.free_energy
-   :members:
-   :undoc-members:
-   :show-inheritance:
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
 
-Functions
-^^^^^^^^^
+Overview
+--------
 
-.. autofunction:: lrs.core.free_energy.calculate_epistemic_value
+LRS-Agents provides:
 
-   Calculate epistemic value (information gain) of a policy.
+* **Automatic Adaptation**: Agents adapt when tools fail—no manual error handling needed
+* **Precision Tracking**: Hierarchical confidence tracking (abstract, planning, execution)
+* **Expected Free Energy**: Mathematical framework for policy selection
+* **LLM Integration**: Use LLMs as variational proposal mechanisms
+* **Multi-Agent Support**: Social precision tracking and coordination
 
-   Higher epistemic value indicates the policy will reduce uncertainty about the world.
-   Novel tools or uncertain outcomes have high epistemic value.
+Key Features
+------------
 
-   :param policy: Sequence of tools to execute
-   :param state: Current belief state
-   :param historical_stats: Historical tool performance statistics
-   :return: Epistemic value (0 to ~2, higher = more information gain)
+🎯 **Automatic Adaptation**
+   Agents detect surprises and adapt strategies automatically
 
-   **Example:**
+🧠 **Hierarchical Precision**
+   Track confidence at multiple levels (abstract, planning, execution)
 
-   .. code-block:: python
+⚡ **Expected Free Energy**
+   Balance exploration (information gain) vs exploitation (reward)
 
-      from lrs.core.free_energy import calculate_epistemic_value
+🤖 **LLM Integration**
+   Use Claude, GPT-4, or any LLM for policy generation
 
-      epistemic = calculate_epistemic_value(
-          policy=[novel_tool, uncertain_tool],
-          state={},
-          historical_stats=None  # No history = high uncertainty
-      )
-      # Returns ~1.5 (high information gain)
+🔧 **Framework Agnostic**
+   Works with LangChain, OpenAI Assistants, AutoGPT
 
-.. autofunction:: lrs.core.free_energy.calculate_pragmatic_value
+📊 **Built-in Monitoring**
+   Streamlit dashboard, structured logging, state tracking
 
-   Calculate pragmatic value (expected reward) of a policy.
+Installation
+------------
 
-   Higher pragmatic value indicates the policy is likely to achieve​​​​​​​​​​​​​​​​
+.. code-block:: bash
 
+   pip install lrs-agents
+
+Quick Example
+-------------
+
+.. code-block:: python
+
+   from langchain_anthropic import ChatAnthropic
+   from lrs import create_lrs_agent
+   from lrs.core.lens import ToolLens, ExecutionResult
+
+   # Define a tool
+   class WeatherTool(ToolLens):
+       def get(self, state):
+           # Tool implementation
+           return ExecutionResult(True, "sunny", None, 0.1)
+       
+       def set(self, state, obs):
+           return {**state, 'weather': obs}
+
+   # Create agent
+   llm = ChatAnthropic(model="claude-sonnet-4-20250514")
+   agent = create_lrs_agent(llm, [WeatherTool()])
+
+   # Run task
+   result = agent.invoke({
+       'messages': [{'role': 'user', 'content': 'Get weather'}],
+       'max_iterations': 10
+   })
+
+Why LRS-Agents?
+---------------
+
+Traditional agents fail when tools break. They need manual error handling, retry logic, and fallback strategies. LRS-Agents solve this through **Active Inference**:
+
+1. **Track Precision**: Agents maintain confidence in their world model
+2. **Detect Surprises**: High prediction errors signal problems
+3. **Adapt Automatically**: Low precision triggers exploration of alternatives
+4. **No Manual Handling**: The framework handles failures automatically
+
+Learn More
+----------
+
+* Read the :doc:`getting_started/quickstart` guide
+* Understand :doc:`getting_started/core_concepts`
+* Explore :doc:`tutorials/01_quickstart`
+* Check out the `GitHub repository <https://github.com/YourOrg/lrs-agents>`_
+
+Citation
+--------
+
+If you use LRS-Agents in your research, please cite:
+
+.. code-block:: bibtex
+
+   @software{lrs_agents,
+     title = {LRS-Agents: Resilient AI Agents via Active Inference},
+     author = {LRS-Agents Contributors},
+     year = {2024},
+     url = {https://github.com/YourOrg/lrs-agents}
+   }
+
+License
+-------
+
+LRS-Agents is released under the MIT License. See the LICENSE file for details.

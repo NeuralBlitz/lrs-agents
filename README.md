@@ -4,7 +4,7 @@ $$ LRS-AGENTS $$
 ```markdown
 # LRS-Agents: Resilient AI Agents via Active Inference
 
-[![CI](https://github.com/YourOrg/lrs-agents/workflows/CI/badge.svg)](https://github.com/YourOrg/lrs-agents/actions)
+[![CI](https://github.com/NeuralBlitz/lrs-agents/workflows/CI/badge.svg)](https://github.com/NeuralBlitz/lrs-agents/actions)
 [![Documentation](https://img.shields.io/badge/docs-latest-brightgreen.svg)](https://lrs-agents.readthedocs.io)
 [![PyPI version](https://badge.fury.io/py/lrs-agents.svg)](https://badge.fury.io/py/lrs-agents)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)

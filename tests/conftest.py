@@ -1,40 +1,33 @@
-"""
-Pytest configuration and shared fixtures.
-"""
+"""Shared test fixtures and configuration."""
 
 import pytest
-import tempfile
-import shutil
-from pathlib import Path
+from unittest.mock import Mock
+from typing import Dict, Any, List
 
 
 @pytest.fixture
-def temp_dir():
-    """Create a temporary directory for tests"""
-    tmpdir = tempfile.mkdtemp()
-    yield tmpdir
-    shutil.rmtree(tmpdir)
+def temp_dir(tmp_path):
+    """Create a temporary directory for tests."""
+    return tmp_path
 
 
 @pytest.fixture
-def sample_state():
-    """Sample agent state for testing"""
+def sample_state() -> Dict[str, Any]:
+    """Sample agent state for testing."""
     return {
-        'messages': [{'role': 'user', 'content': 'Test task'}],
+        'messages': [
+            {'role': 'user', 'content': 'Test task'}
+        ],
         'belief_state': {'goal': 'test'},
-        'precision': {
-            'execution': 0.5,
-            'planning': 0.5,
-            'abstract': 0.5
-        },
+        'precision': {'execution': 0.5, 'planning': 0.5, 'abstract': 0.5},
         'tool_history': [],
         'adaptation_count': 0
     }
 
 
 @pytest.fixture
-def sample_preferences():
-    """Sample preferences for testing"""
+def sample_preferences() -> Dict[str, float]:
+    """Sample preferences for testing."""
     return {
         'success': 5.0,
         'error': -3.0,
@@ -44,10 +37,9 @@ def sample_preferences():
 
 @pytest.fixture
 def mock_llm():
-    """Mock LLM for testing"""
-    from unittest.mock import Mock
-    
+    """Mock LLM for testing."""
     llm = Mock()
-    llm.invoke = Mock(return_value=Mock(content="Mock response"))
-    
+    llm.invoke = Mock(return_value=Mock(
+        content='{"proposals": []}'
+    ))
     return llm

@@ -80,7 +80,48 @@ jobs:
         pip install safety
         safety check --json || true
 
-  docs:
+   docs:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install package
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+    
+    - name: Install documentation dependencies
+      run: |
+        pip install -r docs/requirements.txt
+    
+    - name: Build documentation
+      run: |
+        cd docs
+        make clean
+        make html
+      # Don't fail on warnings - just build successfully
+    
+    - name: Check for build errors (not warnings)
+      run: |
+        cd docs
+        if [ ! -d "build/html" ]; then
+          echo "Documentation build failed - no output directory"
+          exit 1
+        fi
+        echo "Documentation built successfully"
+    
+    - name: Upload documentation artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: documentation
+        path: docs/build/html/
+
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4

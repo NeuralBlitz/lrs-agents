@@ -32,23 +32,31 @@ recommonmark>=0.7.1
 # For link checking
 requests>=2.31.0
 
-# Core LRS-Agents dependencies (for autodoc)
-# These should match the main pyproject.toml
+# Core LRS-Agents dependencies (for autodoc to work)
 langchain>=0.1.0
 langchain-anthropic>=0.1.0
 langchain-openai>=0.0.5
+langchain-community>=0.0.20
+langgraph>=0.0.20
 pydantic>=2.5.0
 typing-extensions>=4.9.0
+
+# Testing framework (required by lrs code)
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# OpenAI (optional but referenced)
+openai>=1.0.0
 
 # For examples in documentation
 numpy>=1.24.0
 matplotlib>=3.7.0
 plotly>=5.18.0
 
-# Optional: For better code highlighting
+# For better code highlighting
 pygments>=2.17.0
 
-# For testing documentation
-pytest>=7.4.0
-pytest-xdist>=3.5.0
-
+# Additional dependencies that lrs modules might import
+redis>=5.0.0
+psycopg2-binary>=2.9.0
+streamlit>=1.28.0

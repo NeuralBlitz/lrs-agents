@@ -1,472 +1,490 @@
 """
-LangGraph integration for LRS-Agents.
+LangGraph integration for Lambda-Reflexive Synthesis agents.
 
-Provides the main agent builder that creates a LangGraph execution graph
-with Active Inference dynamics (precision tracking, G calculation, adaptation).
+Provides drop-in replacement for standard ReAct agents with active inference dynamics.
+
+Usage:
+    from lrs.integration.langgraph import create_lrs_agent
+    from langchain_anthropic import ChatAnthropic
+    
+    llm = ChatAnthropic(model="claude-sonnet-4-20250514")
+    tools = [...]  # Your tools
+    
+    agent = create_lrs_agent(llm, tools)
+    result = agent.invoke({"messages": [{"role": "user", "content": "Task"}]})
 """
 
-from typing import Dict, List, Any, Optional, TypedDict, Annotated
-import operator
+from typing import Dict, List, Annotated, Literal, Optional, Any
+from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, END
+from datetime import datetime
+import operator
 
-from lrs.core.precision import HierarchicalPrecision
+from lrs.core.precision import HierarchicalPrecision, PrecisionParameters
 from lrs.core.free_energy import (
     calculate_expected_free_energy,
-    evaluate_policy,
-    precision_weighted_selection
+    precision_weighted_selection,
+    PolicyEvaluation
 )
-from lrs.core.registry import ToolRegistry
 from lrs.core.lens import ToolLens, ExecutionResult
-from lrs.inference.llm_policy_generator import LLMPolicyGenerator
-from lrs.monitoring.tracker import LRSStateTracker
+from lrs.core.registry import ToolRegistry
 
+
+# ============================================================================
+# State Schema
+# ============================================================================
 
 class LRSState(TypedDict, total=False):
     """
-    Complete state schema for LRS agents.
+    Complete state for LRS agent.
     
-    This is the state that flows through the LangGraph execution graph.
-    
-    Attributes:
-        messages: Conversation messages
-        belief_state: Agent's current beliefs about the world
-        precision: Precision values at each hierarchical level
-        prediction_errors: Recent prediction errors
-        current_policy: Currently executing policy
-        candidate_policies: Policies being considered
-        G_values: Expected Free Energy for each candidate
-        tool_history: History of tool executions
-        adaptation_count: Number of adaptations triggered
-        current_hbn_level: Current hierarchical level (abstract/planning/execution)
-        next: Next node to execute in graph
+    TypedDict with total=False allows optional fields for incremental updates.
     """
-    # Core state
-    messages: Annotated[List[Dict[str, str]], operator.add]
-    belief_state: Dict[str, Any]
+    # Standard LangGraph fields
+    messages: Annotated[List[Dict[str, Any]], operator.add]
     
     # Precision tracking
     precision: Dict[str, float]
-    prediction_errors: Dict[str, List[float]]
+    precision_history: List[Dict[str, float]]
     
-    # Policy state
-    current_policy: List[ToolLens]
-    candidate_policies: List[Dict[str, Any]]
-    G_values: Dict[int, float]
+    # Policy management
+    candidate_policies: List[List[ToolLens]]
+    policy_evaluations: List[PolicyEvaluation]
+    selected_policy: List[ToolLens]
+    current_policy_index: int
     
-    # History
+    # Execution tracking
     tool_history: Annotated[List[Dict[str, Any]], operator.add]
+    
+    # Hierarchical state
+    current_hbn_level: Literal["abstract", "planning", "execution"]
+    belief_state: Dict[str, Any]
+    
+    # Adaptation tracking
     adaptation_count: int
+    adaptation_events: List[Dict[str, Any]]
     
-    # Hierarchical level
-    current_hbn_level: str
-    
-    # Graph routing
-    next: str
+    # Goal and preferences
+    goal: str
+    preferences: Dict[str, float]
 
+
+# ============================================================================
+# Graph Builder
+# ============================================================================
 
 class LRSGraphBuilder:
     """
-    Builder for LangGraph-based LRS agents.
+    Constructs a LangGraph with active inference dynamics.
     
-    Creates a StateGraph with nodes for:
-    1. Initialize - Set up initial state
-    2. Generate policies - Create candidate policies
-    3. Evaluate G - Calculate Expected Free Energy
-    4. Select policy - Precision-weighted selection
-    5. Execute tool - Run selected policy
-    6. Update precision - Bayesian belief update
+    Architecture:
+        propose_policies → evaluate_G → select_policy → execute_tool → 
+        update_precision → [decision gate] → {continue | replan | end}
     
-    Conditional edges based on precision gates:
-    - γ > 0.7 → Execute (confident)
-    - 0.4 < γ < 0.7 → Replan (uncertain)
-    - γ < 0.4 → Escalate (confused)
-    
-    Examples:
-        >>> from langchain_anthropic import ChatAnthropic
-        >>> 
-        >>> llm = ChatAnthropic(model="claude-sonnet-4-20250514")
-        >>> registry = ToolRegistry()
-        >>> # ... register tools ...
-        >>> 
-        >>> builder = LRSGraphBuilder(llm, registry)
-        >>> agent = builder.build()
-        >>> 
-        >>> result = agent.invoke({
-        ...     "messages": [{"role": "user", "content": "Fetch data"}]
-        ... })
+    Attributes:
+        llm: Language model for policy proposal generation
+        registry: ToolRegistry with available tools
+        precision_manager: HierarchicalPrecision tracker
+        preferences: Goal preferences for pragmatic value calculation
     """
     
     def __init__(
         self,
-        llm: Any,
+        llm,
         registry: ToolRegistry,
         preferences: Optional[Dict[str, float]] = None,
-        use_llm_proposals: bool = True,
-        tracker: Optional[LRSStateTracker] = None
+        precision_config: Optional[Dict[str, PrecisionParameters]] = None
     ):
         """
-        Initialize LRS graph builder.
+        Initialize graph builder.
         
         Args:
-            llm: Language model for policy generation
-            registry: Tool registry
-            preferences: Reward function (default: {'success': 5.0, 'error': -3.0})
-            use_llm_proposals: Use LLM for proposals (vs exhaustive search)
-            tracker: Optional state tracker for monitoring
+            llm: Language model (must have .invoke() or .generate() method)
+            registry: Tool registry with available tools
+            preferences: Goal preferences for G calculation.
+                Example: {'data_retrieved': 3.0, 'error': -5.0}
+            precision_config: Optional custom precision parameters per level
         """
         self.llm = llm
         self.registry = registry
         self.preferences = preferences or {
-            'success': 5.0,
-            'error': -3.0,
-            'step_cost': -0.1
+            'success': 2.0,
+            'error': -5.0,
+            'execution_time': -0.1
         }
-        self.use_llm_proposals = use_llm_proposals
-        self.tracker = tracker
         
-        # Initialize components
-        self.hp = HierarchicalPrecision()
-        
-        if use_llm_proposals:
-            self.llm_generator = LLMPolicyGenerator(llm, registry)
+        # Initialize hierarchical precision
+        if precision_config:
+            self.hp = HierarchicalPrecision(levels=precision_config)
+        else:
+            self.hp = HierarchicalPrecision()
     
     def build(self) -> StateGraph:
         """
-        Build and compile the LRS agent graph.
+        Construct the complete LRS graph.
         
         Returns:
             Compiled StateGraph ready for execution
         """
-        # Create graph
         workflow = StateGraph(LRSState)
         
         # Add nodes
-        workflow.add_node("initialize", self._initialize)
+        workflow.add_node("initialize", self._initialize_state)
         workflow.add_node("generate_policies", self._generate_policies)
-        workflow.add_node("evaluate_G", self._evaluate_G)
+        workflow.add_node("evaluate_G", self._evaluate_free_energy)
         workflow.add_node("select_policy", self._select_policy)
         workflow.add_node("execute_tool", self._execute_tool)
         workflow.add_node("update_precision", self._update_precision)
+        workflow.add_node("check_goal", self._check_goal_satisfaction)
         
-        # Set entry point
+        # Define flow
         workflow.set_entry_point("initialize")
-        
-        # Add edges
         workflow.add_edge("initialize", "generate_policies")
         workflow.add_edge("generate_policies", "evaluate_G")
         workflow.add_edge("evaluate_G", "select_policy")
         workflow.add_edge("select_policy", "execute_tool")
         workflow.add_edge("execute_tool", "update_precision")
+        workflow.add_edge("update_precision", "check_goal")
         
-        # Add conditional edge from update_precision (precision gate)
+        # Conditional branching based on precision and goal state
         workflow.add_conditional_edges(
-            "update_precision",
-            self._precision_gate,
+            "check_goal",
+            self._decision_gate,
             {
-                "continue": "generate_policies",  # Continue execution
-                "end": END                         # Task complete
+                "success": END,
+                "continue": "execute_tool",
+                "replan": "generate_policies",
+                "fail": END
             }
         )
         
-        # Compile
         return workflow.compile()
     
-    # Node implementations
+    # ========================================================================
+    # Node Implementations
+    # ========================================================================
     
-    def _initialize(self, state: LRSState) -> LRSState:
+    def _initialize_state(self, state: LRSState) -> LRSState:
         """
-        Initialize agent state.
+        Initialize agent state from user message.
         
-        Sets up precision, belief state, and history tracking.
+        Extracts goal, sets initial precision, prepares belief state.
         """
-        # Initialize precision if not present
-        if not state.get('precision'):
-            state['precision'] = self.hp.get_all()
+        # Extract goal from messages
+        if state.get('messages'):
+            latest_message = state['messages'][-1]
+            goal = latest_message.get('content', 'No goal specified')
+        else:
+            goal = 'No goal specified'
         
-        # Initialize belief state
-        if not state.get('belief_state'):
-            state['belief_state'] = {}
-        
-        # Initialize history
-        if not state.get('tool_history'):
-            state['tool_history'] = []
-        
-        if not state.get('adaptation_count'):
-            state['adaptation_count'] = 0
-        
-        # Set hierarchical level
-        state['current_hbn_level'] = 'planning'
+        # Initialize state
+        state['goal'] = goal
+        state['precision'] = self.hp.get_all()
+        state['precision_history'] = [self.hp.get_all()]
+        state['current_hbn_level'] = 'abstract'
+        state['adaptation_count'] = 0
+        state['adaptation_events'] = []
+        state['tool_history'] = []
+        state['current_policy_index'] = 0
+        state['belief_state'] = {
+            'goal': goal,
+            'goal_satisfied': False
+        }
+        state['preferences'] = self.preferences
         
         return state
     
     def _generate_policies(self, state: LRSState) -> LRSState:
         """
-        Generate candidate policies.
+        Generate candidate policies compositionally.
         
-        Uses LLM proposals (if enabled) or exhaustive search.
+        In full implementation with LLM integration, this would call
+        LLMPolicyGenerator. For now, uses exhaustive search.
         """
-        if self.use_llm_proposals:
-            # LLM-based generation
-            proposals = self.llm_generator.generate_proposals(
-                state=state,
-                precision=state['precision'].get('planning', 0.5)
-            )
-        else:
-            # Exhaustive search (for small tool sets)
-            proposals = self._generate_policy_candidates(max_depth=3)
+        state['current_hbn_level'] = 'planning'
         
-        state['candidate_policies'] = proposals
+        # Generate policies (simplified - in production use LLM)
+        max_depth = 2 if state['precision']['planning'] > 0.6 else 3
+        candidates = self._generate_policy_candidates(max_depth)
+        
+        state['candidate_policies'] = candidates
+        
         return state
     
-    def _generate_policy_candidates(
-        self,
-        max_depth: int = 3
-    ) -> List[Dict[str, Any]]:
+    def _generate_policy_candidates(self, max_depth: int) -> List[List[ToolLens]]:
         """
-        Generate policies via exhaustive search.
+        Generate all valid tool sequences up to max_depth.
         
-        Only practical for small tool sets (<10 tools).
-        
-        Args:
-            max_depth: Maximum policy length
-        
-        Returns:
-            List of policy candidates
+        TODO: Replace with LLM-guided generation for production.
         """
-        candidates = []
-        tools = list(self.registry.tools.values())
+        policies = []
         
-        def build_policies(current_policy, depth):
+        def build_tree(current: List[ToolLens], depth: int):
             if depth == 0:
-                if current_policy:
-                    candidates.append({
-                        'policy': current_policy,
-                        'strategy': 'unknown'
-                    })
+                if current:
+                    policies.append(current)
                 return
             
-            # Add single-tool policy
-            if current_policy:
-                candidates.append({
-                    'policy': current_policy,
-                    'strategy': 'unknown'
-                })
-            
-            # Extend with each tool
-            for tool in tools:
-                build_policies(current_policy + [tool], depth - 1)
+            for tool in self.registry.tools.values():
+                # Avoid immediate repetition
+                if not current or tool != current[-1]:
+                    build_tree(current + [tool], depth - 1)
         
-        # Generate all policies up to max_depth
-        build_policies([], max_depth)
-        
-        # Limit to reasonable number
-        return candidates[:20]
+        build_tree([], max_depth)
+        return policies
     
-    def _evaluate_G(self, state: LRSState) -> LRSState:
+    def _evaluate_free_energy(self, state: LRSState) -> LRSState:
         """
         Calculate Expected Free Energy for all candidate policies.
+        
+        Core active inference calculation: G = Epistemic - Pragmatic
         """
-        G_values = {}
+        evaluations = []
         
-        for i, proposal in enumerate(state['candidate_policies']):
-            policy = proposal['policy']
-            
-            # Calculate G
-            G = calculate_expected_free_energy(
+        for policy in state['candidate_policies']:
+            eval_result = calculate_expected_free_energy(
                 policy=policy,
-                state=state,
-                preferences=self.preferences,
-                historical_stats=self.registry.statistics
+                state=state['belief_state'],
+                preferences=state['preferences']
             )
-            
-            G_values[i] = G
+            evaluations.append(eval_result)
         
-        state['G_values'] = G_values
+        state['policy_evaluations'] = evaluations
+        
         return state
     
     def _select_policy(self, state: LRSState) -> LRSState:
         """
-        Select policy via precision-weighted softmax.
+        Select policy via precision-weighted softmax over G values.
+        
+        High precision → exploit (choose lowest G)
+        Low precision → explore (flatten distribution)
         """
-        if not state['candidate_policies']:
-            state['current_policy'] = []
-            return state
+        selected_idx = precision_weighted_selection(
+            evaluations=state['policy_evaluations'],
+            precision=state['precision']['planning']
+        )
         
-        # Evaluate all policies
-        evaluations = []
-        for i, proposal in enumerate(state['candidate_policies']):
-            policy = proposal['policy']
-            G = state['G_values'][i]
-            
-            eval_obj = evaluate_policy(
-                policy=policy,
-                state=state,
-                preferences=self.preferences,
-                historical_stats=self.registry.statistics
-            )
-            eval_obj.total_G = G  # Override with calculated G
-            evaluations.append(eval_obj)
-        
-        # Precision-weighted selection
-        precision = state['precision'].get('planning', 0.5)
-        selected_idx = precision_weighted_selection(evaluations, precision)
-        
-        # Set current policy
-        state['current_policy'] = state['candidate_policies'][selected_idx]['policy']
+        selected_policy = state['candidate_policies'][selected_idx]
+        state['selected_policy'] = selected_policy
+        state['current_policy_index'] = 0  # Reset for execution
         
         return state
     
     def _execute_tool(self, state: LRSState) -> LRSState:
         """
-        Execute the selected policy.
+        Execute next tool in selected policy.
         
-        Runs each tool in sequence, tracking results.
+        Updates belief state and records prediction error.
         """
-        if not state.get('current_policy'):
+        state['current_hbn_level'] = 'execution'
+        
+        if not state.get('selected_policy'):
             return state
         
-        for tool in state['current_policy']:
-            # Execute tool
-            result = tool.get(state['belief_state'])
-            
-            # Update belief state
-            if result.success:
-                state['belief_state'] = tool.set(state['belief_state'], result.value)
-            
-            # Track execution
-            execution_entry = {
-                'tool': tool.name,
-                'success': result.success,
-                'prediction_error': result.prediction_error,
-                'error': result.error,
-                'result': result.value
-            }
-            
-            if 'tool_history' not in state:
-                state['tool_history'] = []
-            state['tool_history'].append(execution_entry)
-            
-            # Update registry statistics
-            self.registry.update_statistics(
-                tool_name=tool.name,
-                success=result.success,
-                prediction_error=result.prediction_error
-            )
-            
-            # Track with monitor
-            if self.tracker:
-                self.tracker.track_state(state)
-            
-            # Stop on failure
-            if not result.success:
-                break
+        policy = state['selected_policy']
+        idx = state['current_policy_index']
+        
+        if idx >= len(policy):
+            # Policy exhausted
+            return state
+        
+        # Execute tool
+        tool = policy[idx]
+        result = tool.get(state['belief_state'])
+        
+        # Record execution
+        execution_record = {
+            'timestamp': datetime.now().isoformat(),
+            'tool': tool.name,
+            'success': result.success,
+            'prediction_error': result.prediction_error,
+            'error_message': result.error
+        }
+        
+        state['tool_history'].append(execution_record)
+        
+        # Update belief state
+        if result.success:
+            state['belief_state'] = tool.set(state['belief_state'], result.value)
+        
+        # Advance policy index
+        state['current_policy_index'] = idx + 1
         
         return state
     
     def _update_precision(self, state: LRSState) -> LRSState:
         """
-        Update precision based on prediction errors.
+        Update hierarchical precision based on prediction error.
         
-        Implements Bayesian belief update via Beta distribution.
+        Implements Bayesian belief revision via Beta distribution updates.
         """
-        if not state.get('tool_history'):
+        if not state['tool_history']:
             return state
         
-        # Get latest execution
-        latest = state['tool_history'][-1]
-        prediction_error = latest['prediction_error']
+        latest_execution = state['tool_history'][-1]
+        prediction_error = latest_execution['prediction_error']
         
         # Update hierarchical precision
-        updated = self.hp.update('execution', prediction_error)
+        updated_precisions = self.hp.update(
+            level='execution',
+            prediction_error=prediction_error
+        )
         
-        # Store in state
-        state['precision'] = self.hp.get_all()
+        # Sync to state
+        state['precision'].update(updated_precisions)
+        state['precision_history'].append(self.hp.get_all())
         
-        # Check for adaptation
-        if state['precision']['execution'] < 0.4:
-            state['adaptation_count'] = state.get('adaptation_count', 0) + 1
+        # Record adaptation events
+        if prediction_error > 0.7:
+            state['adaptation_count'] += 1
+            state['adaptation_events'].append({
+                'timestamp': datetime.now().isoformat(),
+                'tool': latest_execution['tool'],
+                'error': prediction_error,
+                'precision_before': state['precision_history'][-2]['planning'] if len(state['precision_history']) > 1 else None,
+                'precision_after': state['precision']['planning']
+            })
         
         return state
     
-    def _precision_gate(self, state: LRSState) -> str:
+    def _check_goal_satisfaction(self, state: LRSState) -> LRSState:
         """
-        Conditional routing based on precision.
+        Check if goal has been satisfied.
         
-        Decides whether to continue execution or end.
+        In production, this would use more sophisticated goal checking.
+        """
+        # Simple heuristic: goal satisfied if no errors in last 2 executions
+        if len(state['tool_history']) >= 2:
+            recent_success = all(
+                exec['success'] for exec in state['tool_history'][-2:]
+            )
+            state['belief_state']['goal_satisfied'] = recent_success
+        
+        return state
+    
+    # ========================================================================
+    # Decision Gate
+    # ========================================================================
+    
+    def _decision_gate(self, state: LRSState) -> str:
+        """
+        Determine next action based on goal satisfaction and precision.
         
         Returns:
-            "continue" or "end"
+            "success": Goal achieved, end execution
+            "continue": Continue current policy
+            "replan": Precision dropped, generate new policies
+            "fail": Systemic failure, cannot proceed
         """
-        # Check if task is complete
-        belief_state = state.get('belief_state', {})
+        # Check for goal satisfaction
+        if state['belief_state'].get('goal_satisfied', False):
+            return "success"
         
-        # Simple completion check (can be customized)
-        if belief_state.get('completed', False):
-            return "end"
+        # Check for systemic failure (all levels have very low precision)
+        if all(p < 0.2 for p in state['precision'].values()):
+            return "fail"
         
-        # Check tool history
-        tool_history = state.get('tool_history', [])
+        # Check if current policy is exhausted
+        if state['current_policy_index'] >= len(state.get('selected_policy', [])):
+            # Policy done but goal not satisfied → replan
+            return "replan"
         
-        # End if max iterations reached
-        max_iterations = state.get('max_iterations', 50)
-        if len(tool_history) >= max_iterations:
-            return "end"
+        # Check if precision collapsed (adaptation needed)
+        if state['precision']['planning'] < 0.4:
+            return "replan"
         
-        # End if recent success
-        if tool_history and tool_history[-1]['success']:
-            # Check if goal appears met
-            if 'goal_met' in belief_state or 'data' in belief_state:
-                return "end"
-        
-        # Continue by default
+        # Continue with current policy
         return "continue"
 
 
+# ============================================================================
+# Factory Function (Public API)
+# ============================================================================
+
 def create_lrs_agent(
-    llm: Any,
+    llm,
     tools: List[ToolLens],
     preferences: Optional[Dict[str, float]] = None,
-    use_llm_proposals: bool = True,
-    tracker: Optional[LRSStateTracker] = None
+    **kwargs
 ) -> StateGraph:
     """
-    Create an LRS agent (convenience function).
+    Create an LRS-powered agent as drop-in replacement for create_react_agent.
     
     Args:
-        llm: Language model
-        tools: List of ToolLens objects
-        preferences: Reward function
-        use_llm_proposals: Use LLM for policy generation
-        tracker: Optional state tracker
+        llm: Language model (Anthropic, OpenAI, etc.)
+        tools: List of ToolLens objects or LangChain tools
+        preferences: Goal preferences for pragmatic value calculation
+        **kwargs: Additional configuration (precision_threshold, etc.)
     
     Returns:
-        Compiled LangGraph agent
+        Compiled StateGraph with active inference dynamics
     
     Examples:
         >>> from lrs import create_lrs_agent
         >>> from langchain_anthropic import ChatAnthropic
         >>> 
         >>> llm = ChatAnthropic(model="claude-sonnet-4-20250514")
-        >>> tools = [MyTool(), AnotherTool()]
+        >>> tools = [ShellTool(), PythonREPLTool()]
         >>> 
-        >>> agent = create_lrs_agent(llm, tools)
+        >>> agent = create_lrs_agent(llm, tools, preferences={'success': 5.0})
         >>> 
         >>> result = agent.invoke({
-        ...     "messages": [{"role": "user", "content": "Solve task"}]
+        ...     "messages": [{"role": "user", "content": "List files in /tmp"}]
         ... })
     """
-    # Create registry
+    # Create tool registry
     registry = ToolRegistry()
     for tool in tools:
         registry.register(tool)
     
-    # Build agent
+    # Build graph
     builder = LRSGraphBuilder(
         llm=llm,
         registry=registry,
-        preferences=preferences,
-        use_llm_proposals=use_llm_proposals,
-        tracker=tracker
+        preferences=preferences
     )
     
     return builder.build()
+
+
+# ============================================================================
+# Monitoring Integration
+# ============================================================================
+
+def create_monitored_lrs_agent(
+    llm,
+    tools: List[ToolLens],
+    tracker: 'LRSStateTracker',
+    **kwargs
+) -> StateGraph:
+    """
+    Create LRS agent with integrated monitoring.
+    
+    Automatically streams state updates to dashboard tracker.
+    
+    Args:
+        llm: Language model
+        tools: Tool lenses
+        tracker: LRSStateTracker instance for monitoring
+        **kwargs: Additional configuration
+    
+    Returns:
+        Compiled StateGraph with monitoring hooks
+    """
+    agent = create_lrs_agent(llm, tools, **kwargs)
+    
+    # Wrap invoke to capture state
+    original_invoke = agent.invoke
+    
+    def monitored_invoke(input_state, **invoke_kwargs):
+        result = original_invoke(input_state, **invoke_kwargs)
+        
+        # Update tracker with final state
+        tracker.update(result)
+        
+        return result
+    
+    agent.invoke = monitored_invoke
+    
+    return agent

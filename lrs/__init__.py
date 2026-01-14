@@ -2,11 +2,10 @@
 
 __version__ = "0.2.0"
 
-# Don't import anything at package level to avoid circular imports
-# Users should import from submodules:
-#   from lrs.integration.langgraph import create_lrs_agent
-#   from lrs.core import PrecisionParameters
+# Export main entry point
+from lrs.integration.langgraph import create_lrs_agent
 
 __all__ = [
     "__version__",
+    "create_lrs_agent",
 ]

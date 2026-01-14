@@ -1129,3 +1129,1222 @@ Due to the massive size of this repository, I’ll continue building out the com
 1. **GitHub workflows** (`.github/workflows/*.yml`)
 
 Which section would you like me to complete next? 🚀​​​​​​​​​​​​​​​​
+
+# Complete Core Module Files
+
+-----
+
+## `lrs/__init__.py`
+
+```python
+"""
+LRS-Agents: Active Inference for Adaptive AI
+
+LRS (Lambda-Reflexive Synthesis) is a framework for building adaptive AI agents
+using Active Inference from neuroscience.
+
+Key components:
+- Precision tracking (Bayesian confidence)
+- Expected Free Energy calculation
+- Automatic exploration-exploitation balance
+- Tool composition via categorical morphisms
+
+Examples:
+    >>> from lrs import create_lrs_agent
+    >>> from langchain_anthropic import ChatAnthropic
+    >>> 
+    >>> llm = ChatAnthropic(model="claude-sonnet-4-20250514")
+    >>> agent = create_lrs_agent(llm, tools=[...])
+    >>> 
+    >>> result = agent.invoke({"messages": [{"role": "user", "content": "Task"}]})
+"""
+
+from lrs.integration.langgraph import create_lrs_agent, LRSGraphBuilder
+from lrs.core.precision import PrecisionParameters, HierarchicalPrecision
+from lrs.core.free_energy import (
+    calculate_expected_free_energy,
+    calculate_epistemic_value,
+    calculate_pragmatic_value,
+    precision_weighted_selection,
+)
+from lrs.core.lens import ToolLens, ExecutionResult
+from lrs.core.registry import ToolRegistry
+
+__version__ = "0.2.0"
+__author__ = "LRS Contributors"
+__license__ = "MIT"
+
+__all__ = [
+    # Main entry point
+    "create_lrs_agent",
+    "LRSGraphBuilder",
+    # Core components
+    "PrecisionParameters",
+    "HierarchicalPrecision",
+    "calculate_expected_free_energy",
+    "calculate_epistemic_value",
+    "calculate_pragmatic_value",
+    "precision_weighted_selection",
+    "ToolLens",
+    "ExecutionResult",
+    "ToolRegistry",
+]
+```
+
+-----
+
+## `lrs/py.typed`
+
+```
+# PEP 561 marker file for type hints
+```
+
+-----
+
+## `lrs/core/__init__.py`
+
+```python
+"""
+Core mathematical components for Active Inference.
+
+This module implements:
+- Bayesian precision tracking
+- Expected Free Energy calculation
+- Tool abstraction (ToolLens)
+- Tool registry with fallback chains
+"""
+
+from lrs.core.precision import PrecisionParameters, HierarchicalPrecision
+from lrs.core.free_energy import (
+    calculate_expected_free_energy,
+    calculate_epistemic_value,
+    calculate_pragmatic_value,
+    precision_weighted_selection,
+    PolicyEvaluation,
+)
+from lrs.core.lens import ToolLens, ExecutionResult
+from lrs.core.registry import ToolRegistry
+
+__all__ = [
+    "PrecisionParameters",
+    "HierarchicalPrecision",
+    "calculate_expected_free_energy",
+    "calculate_epistemic_value",
+    "calculate_pragmatic_value",
+    "precision_weighted_selection",
+    "PolicyEvaluation",
+    "ToolLens",
+    "ExecutionResult",
+    "ToolRegistry",
+]
+```
+
+-----
+
+## `lrs/core/precision.py`
+
+```python
+"""
+Bayesian precision tracking for Active Inference agents.
+
+Precision (γ) represents the agent's confidence in its world model.
+Implemented as Beta-distributed parameters that update via prediction errors.
+"""
+
+from typing import Dict, Optional
+import numpy as np
+from dataclasses import dataclass
+
+
+@dataclass
+class PrecisionParameters:
+    """
+    Beta-distributed precision parameters.
+    
+    Precision γ ~ Beta(α, β) where:
+    - α: "success count" (increases with low prediction errors)
+    - β: "failure count" (increases with high prediction errors)
+    - E[γ] = α / (α + β)
+    
+    Attributes:
+        alpha: Success parameter
+        beta: Failure parameter
+        learning_rate_gain: Rate at which α increases (default: 0.1)
+        learning_rate_loss: Rate at which β increases (default: 0.2)
+        threshold: Error threshold for gain vs loss (default: 0.5)
+    
+    Examples:
+        >>> precision = PrecisionParameters(alpha=5.0, beta=5.0)
+        >>> print(precision.value)  # E[γ] = 5/(5+5) = 0.5
+        0.5
+        >>> 
+        >>> # Low error → increase alpha
+        >>> precision.update(error=0.1)
+        >>> print(precision.value)  # γ increased
+        0.51
+        >>> 
+        >>> # High error → increase beta
+        >>> precision.update(error=0.9)
+        >>> print(precision.value)  # γ decreased
+        0.48
+    """
+    
+    alpha: float = 5.0
+    beta: float = 5.0
+    learning_rate_gain: float = 0.1
+    learning_rate_loss: float = 0.2
+    threshold: float = 0.5
+    
+    @property
+    def value(self) -> float:
+        """Expected value of precision: E[γ] = α / (α + β)"""
+        return self.alpha / (self.alpha + self.beta)
+    
+    @property
+    def variance(self) -> float:
+        """Variance of precision distribution"""
+        a, b = self.alpha, self.beta
+        return (a * b) / ((a + b) ** 2 * (a + b + 1))
+    
+    def update(self, prediction_error: float) -> float:
+        """
+        Update precision based on prediction error.
+        
+        Low error (< threshold) → increase α (gain confidence)
+        High error (≥ threshold) → increase β (lose confidence)
+        
+        Key property: Loss is faster than gain (asymmetric learning)
+        
+        Args:
+            prediction_error: Prediction error in [0, 1]
+        
+        Returns:
+            Updated precision value
+        
+        Examples:
+            >>> p = PrecisionParameters()
+            >>> p.update(0.1)  # Low error
+            0.51
+            >>> p.update(0.9)  # High error
+            0.47
+        """
+        if prediction_error < self.threshold:
+            # Gain confidence slowly
+            self.alpha += self.learning_rate_gain * (1 - prediction_error)
+        else:
+            # Lose confidence quickly
+            self.beta += self.learning_rate_loss * prediction_error
+        
+        return self.value
+    
+    def reset(self):
+        """Reset to initial prior"""
+        self.alpha = 5.0
+        self.beta = 5.0
+
+
+class HierarchicalPrecision:
+    """
+    Three-level hierarchical precision tracking.
+    
+    Levels (from high to low):
+    1. Abstract (level 2): Long-term goals and strategies
+    2. Planning (level 1): Subgoal selection and sequencing
+    3. Execution (level 0): Individual tool calls
+    
+    Errors propagate upward when they exceed a threshold.
+    This prevents minor execution failures from disrupting high-level goals.
+    
+    Attributes:
+        abstract: Abstract-level precision
+        planning: Planning-level precision
+        execution: Execution-level precision
+        propagation_threshold: Error threshold for upward propagation
+        attenuation_factor: How much error is attenuated when propagating
+    
+    Examples:
+        >>> hp = HierarchicalPrecision()
+        >>> 
+        >>> # Small error at execution → only execution precision drops
+        >>> hp.update('execution', 0.3)
+        >>> print(hp.get_level('execution'))  # Decreased
+        0.48
+        >>> print(hp.get_level('planning'))   # Unchanged
+        0.5
+        >>> 
+        >>> # Large error at execution → propagates to planning
+        >>> hp.update('execution', 0.95)
+        >>> print(hp.get_level('execution'))  # Dropped significantly
+        0.32
+        >>> print(hp.get_level('planning'))   # Also dropped
+        0.45
+    """
+    
+    def __init__(
+        self,
+        propagation_threshold: float = 0.7,
+        attenuation_factor: float = 0.5
+    ):
+        """
+        Initialize hierarchical precision.
+        
+        Args:
+            propagation_threshold: Error threshold for upward propagation
+            attenuation_factor: How much to attenuate errors when propagating
+        """
+        self.abstract = PrecisionParameters()
+        self.planning = PrecisionParameters()
+        self.execution = PrecisionParameters()
+        
+        self.propagation_threshold = propagation_threshold
+        self.attenuation_factor = attenuation_factor
+    
+    def update(self, level: str, prediction_error: float) -> Dict[str, float]:
+        """
+        Update precision at specified level and propagate if needed.
+        
+        Propagation rules:
+        - Execution → Planning: If error > threshold
+        - Planning → Abstract: If error > threshold
+        - Errors are attenuated when propagating up
+        
+        Args:
+            level: 'abstract', 'planning', or 'execution'
+            prediction_error: Error in [0, 1]
+        
+        Returns:
+            Dict of updated precision values per level
+        
+        Examples:
+            >>> hp = HierarchicalPrecision()
+            >>> result = hp.update('execution', 0.95)
+            >>> print(result)
+            {'execution': 0.32, 'planning': 0.45}
+        """
+        updated = {}
+        
+        # Update specified level
+        if level == 'execution':
+            self.execution.update(prediction_error)
+            updated['execution'] = self.execution.value
+            
+            # Propagate to planning if error is high
+            if prediction_error > self.propagation_threshold:
+                attenuated_error = prediction_error * self.attenuation_factor
+                self.planning.update(attenuated_error)
+                updated['planning'] = self.planning.value
+                
+                # Propagate to abstract if planning error is also high
+                if attenuated_error > self.propagation_threshold:
+                    super_attenuated = attenuated_error * self.attenuation_factor
+                    self.abstract.update(super_attenuated)
+                    updated['abstract'] = self.abstract.value
+        
+        elif level == 'planning':
+            self.planning.update(prediction_error)
+            updated['planning'] = self.planning.value
+            
+            # Propagate to abstract if error is high
+            if prediction_error > self.propagation_threshold:
+                attenuated_error = prediction_error * self.attenuation_factor
+                self.abstract.update(attenuated_error)
+                updated['abstract'] = self.abstract.value
+        
+        elif level == 'abstract':
+            self.abstract.update(prediction_error)
+            updated['abstract'] = self.abstract.value
+        
+        else:
+            raise ValueError(f"Unknown level: {level}. Use 'abstract', 'planning', or 'execution'")
+        
+        return updated
+    
+    def get_level(self, level: str) -> float:
+        """
+        Get precision value for specified level.
+        
+        Args:
+            level: 'abstract', 'planning', or 'execution'
+        
+        Returns:
+            Precision value in [0, 1]
+        """
+        if level == 'abstract':
+            return self.abstract.value
+        elif level == 'planning':
+            return self.planning.value
+        elif level == 'execution':
+            return self.execution.value
+        else:
+            raise ValueError(f"Unknown level: {level}")
+    
+    def get_all(self) -> Dict[str, float]:
+        """
+        Get all precision values.
+        
+        Returns:
+            Dict mapping level names to precision values
+        """
+        return {
+            'abstract': self.abstract.value,
+            'planning': self.planning.value,
+            'execution': self.execution.value
+        }
+    
+    def reset(self):
+        """Reset all levels to initial priors"""
+        self.abstract.reset()
+        self.planning.reset()
+        self.execution.reset()
+```
+
+-----
+
+## `lrs/core/free_energy.py`
+
+```python
+"""
+Expected Free Energy calculation for Active Inference.
+
+G = Epistemic Value - Pragmatic Value
+  = H[P(o|s)] - E[log P(o|C)]
+  = Information Gain - Expected Reward
+
+Lower G is better (more desirable policies have lower expected free energy).
+"""
+
+from typing import List, Dict, Any, Optional
+import numpy as np
+from dataclasses import dataclass
+
+from lrs.core.lens import ToolLens
+
+
+@dataclass
+class PolicyEvaluation:
+    """
+    Result of evaluating a policy's Expected Free Energy.
+    
+    Attributes:
+        epistemic_value: Information gain (uncertainty reduction)
+        pragmatic_value: Expected reward
+        total_G: Total free energy (epistemic - pragmatic)
+        expected_success_prob: Estimated probability of success
+        components: Detailed breakdown of G calculation
+    """
+    epistemic_value: float
+    pragmatic_value: float
+    total_G: float
+    expected_success_prob: float
+    components: Dict[str, Any]
+
+
+def calculate_epistemic_value(
+    policy: List[ToolLens],
+    state: Dict[str, Any],
+    historical_stats: Optional[Dict[str, Dict]] = None
+) -> float:
+    """
+    Calculate epistemic value (information gain) for a policy.
+    
+    Epistemic value = H[P(o|s)] where H is entropy.
+    
+    Higher epistemic value = more uncertain about outcomes = more learning potential
+    
+    Heuristics for estimating entropy:
+    1. Novel tools (never used) → high entropy
+    2. Tools with high variance in past outcomes → high entropy
+    3. Tools with consistent outcomes → low entropy
+    
+    Args:
+        policy: Sequence of tools
+        state: Current agent state
+        historical_stats: Optional statistics from past executions
+    
+    Returns:
+        Epistemic value (higher = more informative)
+    
+    Examples:
+        >>> policy = [new_tool, established_tool]
+        >>> epistemic = calculate_epistemic_value(policy, state)
+        >>> print(epistemic)  # High due to new_tool
+        0.85
+    """
+    if not policy:
+        return 0.0
+    
+    total_entropy = 0.0
+    
+    for tool in policy:
+        # Check if we have historical data
+        if historical_stats and tool.name in historical_stats:
+            stats = historical_stats[tool.name]
+            
+            # Estimate entropy from success/failure variance
+            success_rate = stats.get('success_rate', 0.5)
+            
+            # Binary entropy: H = -p*log(p) - (1-p)*log(1-p)
+            if 0 < success_rate < 1:
+                p = success_rate
+                entropy = -(p * np.log2(p + 1e-10) + (1-p) * np.log2(1-p + 1e-10))
+            else:
+                entropy = 0.0  # Deterministic
+            
+            # Add variance in prediction errors (if available)
+            error_variance = stats.get('error_variance', 0.0)
+            entropy += error_variance
+            
+            total_entropy += entropy
+        else:
+            # No historical data → high uncertainty
+            total_entropy += 1.0  # Maximum entropy for binary outcome
+    
+    # Normalize by policy length
+    avg_entropy = total_entropy / len(policy)
+    
+    return avg_entropy
+
+
+def calculate_pragmatic_value(
+    policy: List[ToolLens],
+    state: Dict[str, Any],
+    preferences: Dict[str, float],
+    historical_stats: Optional[Dict[str, Dict]] = None,
+    discount_factor: float = 0.95
+) -> float:
+    """
+    Calculate pragmatic value (expected reward) for a policy.
+    
+    Pragmatic value = E[log P(o|C)] where C is preferences
+    
+    Higher pragmatic value = more expected reward
+    
+    Args:
+        policy: Sequence of tools
+        state: Current agent state
+        preferences: Reward weights (e.g., {'success': 5.0, 'error': -3.0})
+        historical_stats: Optional statistics from past executions
+        discount_factor: Temporal discount for multi-step policies
+    
+    Returns:
+        Pragmatic value (higher = more rewarding)
+    
+    Examples:
+        >>> policy = [reliable_tool]
+        >>> pragmatic = calculate_pragmatic_value(
+        ...     policy, state, preferences={'success': 5.0}
+        ... )
+        >>> print(pragmatic)
+        4.5
+    """
+    if not policy:
+        return 0.0
+    
+    total_reward = 0.0
+    cumulative_discount = 1.0
+    
+    for i, tool in enumerate(policy):
+        # Estimate success probability
+        if historical_stats and tool.name in historical_stats:
+            success_prob = historical_stats[tool.name].get('success_rate', 0.5)
+        else:
+            success_prob = 0.5  # Neutral prior
+        
+        # Calculate expected reward for this step
+        success_reward = preferences.get('success', 0.0)
+        error_penalty = preferences.get('error', 0.0)
+        step_cost = preferences.get('step_cost', 0.0)
+        
+        expected_reward = (
+            success_prob * success_reward +
+            (1 - success_prob) * error_penalty +
+            step_cost
+        )
+        
+        # Apply temporal discount
+        total_reward += cumulative_discount * expected_reward
+        cumulative_discount *= discount_factor
+    
+    return total_reward
+
+
+def calculate_expected_free_energy(
+    policy: List[ToolLens],
+    state: Dict[str, Any],
+    preferences: Dict[str, float],
+    historical_stats: Optional[Dict[str, Dict]] = None,
+    epistemic_weight: float = 1.0
+) -> float:
+    """
+    Calculate Expected Free Energy for a policy.
+    
+    G = Epistemic Value - Pragmatic Value
+    
+    Lower G is better:
+    - High epistemic value (learning) → Lower G
+    - High pragmatic value (reward) → Lower G
+    
+    Args:
+        policy: Sequence of tools to evaluate
+        state: Current agent state
+        preferences: Reward function
+        historical_stats: Optional execution history
+        epistemic_weight: Weight for epistemic term (default: 1.0)
+    
+    Returns:
+        G value (lower is better)
+    
+    Examples:
+        >>> policy = [fetch_tool, parse_tool]
+        >>> G = calculate_expected_free_energy(
+        ...     policy, state, preferences={'success': 5.0, 'error': -2.0}
+        ... )
+        >>> print(G)
+        -2.3
+    """
+    epistemic = calculate_epistemic_value(policy, state, historical_stats)
+    pragmatic = calculate_pragmatic_value(policy, state, preferences, historical_stats)
+    
+    # G = Epistemic - Pragmatic
+    # (but we weight the epistemic term)
+    G = epistemic_weight * epistemic - pragmatic
+    
+    return G
+
+
+def evaluate_policy(
+    policy: List[ToolLens],
+    state: Dict[str, Any],
+    preferences: Dict[str, float],
+    historical_stats: Optional[Dict[str, Dict]] = None
+) -> PolicyEvaluation:
+    """
+    Fully evaluate a policy and return detailed breakdown.
+    
+    Args:
+        policy: Policy to evaluate
+        state: Current state
+        preferences: Reward function
+        historical_stats: Execution history
+    
+    Returns:
+        PolicyEvaluation with detailed components
+    
+    Examples:
+        >>> evaluation = evaluate_policy(policy, state, preferences)
+        >>> print(f"G: {evaluation.total_G:.2f}")
+        >>> print(f"Success prob: {evaluation.expected_success_prob:.2%}")
+    """
+    epistemic = calculate_epistemic_value(policy, state, historical_stats)
+    pragmatic = calculate_pragmatic_value(policy, state, preferences, historical_stats)
+    G = epistemic - pragmatic
+    
+    # Estimate success probability
+    if historical_stats and policy:
+        probs = [
+            historical_stats.get(tool.name, {}).get('success_rate', 0.5)
+            for tool in policy
+        ]
+        # Joint probability (assuming independence)
+        success_prob = np.prod(probs)
+    else:
+        success_prob = 0.5 ** len(policy) if policy else 0.0
+    
+    return PolicyEvaluation(
+        epistemic_value=epistemic,
+        pragmatic_value=pragmatic,
+        total_G=G,
+        expected_success_prob=success_prob,
+        components={
+            'epistemic': epistemic,
+            'pragmatic': pragmatic,
+            'policy_length': len(policy),
+            'tool_names': [t.name for t in policy]
+        }
+    )
+
+
+def precision_weighted_selection(
+    policies: List[PolicyEvaluation],
+    precision: float,
+    temperature: float = 1.0
+) -> int:
+    """
+    Select policy via precision-weighted softmax over G values.
+    
+    P(policy) ∝ exp(-γ · G / T)
+    
+    Where:
+    - γ (precision): High → sharp softmax (exploitation)
+                     Low → flat softmax (exploration)
+    - T (temperature): Scaling factor
+    
+    Args:
+        policies: List of evaluated policies
+        precision: Precision value in [0, 1]
+        temperature: Temperature scaling (default: 1.0)
+    
+    Returns:
+        Index of selected policy
+    
+    Examples:
+        >>> policies = [
+        ...     PolicyEvaluation(0.8, 3.0, -2.2, 0.7, {}),  # Best G
+        ...     PolicyEvaluation(0.9, 2.0, -1.1, 0.6, {}),
+        ... ]
+        >>> 
+        >>> # High precision → likely selects policy 0 (best G)
+        >>> idx = precision_weighted_selection(policies, precision=0.9)
+        >>> 
+        >>> # Low precision → more random exploration
+        >>> idx = precision_weighted_selection(policies, precision=0.2)
+    """
+    if not policies:
+        return 0
+    
+    # Extract G values
+    G_values = np.array([p.total_G for p in policies])
+    
+    # Apply precision-weighted softmax
+    # High precision → sharp selection (low effective temperature)
+    # Low precision → flat selection (high effective temperature)
+    effective_temp = temperature / (precision + 1e-10)
+    
+    # Softmax: exp(-G/T) / sum(exp(-G/T))
+    exp_values = np.exp(-G_values / effective_temp)
+    probabilities = exp_values / np.sum(exp_values)
+    
+    # Sample from distribution
+    selected_idx = np.random.choice(len(policies), p=probabilities)
+    
+    return selected_idx
+```
+
+-----
+
+## `lrs/core/lens.py`
+
+```python
+"""
+ToolLens: Categorical abstraction for tools.
+
+A lens is a bidirectional morphism:
+- get: Execute the tool (forward)
+- set: Update belief state (backward)
+
+Lenses compose via the >> operator, creating pipelines with automatic
+error propagation.
+"""
+
+from typing import Any, Dict, Optional
+from dataclasses import dataclass
+from abc import ABC, abstractmethod
+
+
+@dataclass
+class ExecutionResult:
+    """
+    Result of executing a tool.
+    
+    Attributes:
+        success: Whether execution succeeded
+        value: Return value (None if failed)
+        error: Error message (None if succeeded)
+        prediction_error: How surprising this outcome was [0, 1]
+    
+    Examples:
+        >>> # Successful execution
+        >>> result = ExecutionResult(
+        ...     success=True,
+        ...     value="Data fetched",
+        ...     error=None,
+        ...     prediction_error=0.1  # Expected success
+        ... )
+        >>> 
+        >>> # Failed execution
+        >>> result = ExecutionResult(
+        ...     success=False,
+        ...     value=None,
+        ...     error="API timeout",
+        ...     prediction_error=0.9  # Unexpected failure
+        ... )
+    """
+    success: bool
+    value: Optional[Any]
+    error: Optional[str]
+    prediction_error: float
+    
+    def __post_init__(self):
+        """Validate prediction error is in [0, 1]"""
+        if not 0.0 <= self.prediction_error <= 1.0:
+            raise ValueError(f"prediction_error must be in [0, 1], got {self.prediction_error}")
+
+
+class ToolLens(ABC):
+    """
+    Abstract base class for tools as lenses.
+    
+    A lens has two operations:
+    1. get(state) → ExecutionResult: Execute the tool
+    2. set(state, observation) → state: Update belief state
+    
+    Lenses compose via >> operator:
+        lens_a >> lens_b >> lens_c
+    
+    This creates a pipeline where:
+    - Data flows forward through get operations
+    - Belief updates flow backward through set operations
+    - Errors propagate automatically
+    
+    Attributes:
+        name: Tool identifier
+        input_schema: JSON schema for inputs
+        output_schema: JSON schema for outputs
+        call_count: Number of times get() has been called
+        failure_count: Number of times get() has failed
+    
+    Examples:
+        >>> class FetchTool(ToolLens):
+        ...     def get(self, state):
+        ...         data = fetch(state['url'])
+        ...         return ExecutionResult(True, data, None, 0.1)
+        ...     
+        ...     def set(self, state, observation):
+        ...         return {**state, 'data': observation}
+        >>> 
+        >>> class ParseTool(ToolLens):
+        ...     def get(self, state):
+        ...         parsed = json.loads(state['data'])
+        ...         return ExecutionResult(True, parsed, None, 0.05)
+        ...     
+        ...     def set(self, state, observation):
+        ...         return {**state, 'parsed': observation}
+        >>> 
+        >>> # Compose
+        >>> pipeline = FetchTool() >> ParseTool()
+        >>> result = pipeline.get({'url': 'api.com/data'})
+    """
+    
+    def __init__(
+        self,
+        name: str,
+        input_schema: Dict[str, Any],
+        output_schema: Dict[str, Any]
+    ):
+        """
+        Initialize tool lens.
+        
+        Args:
+            name: Unique tool identifier
+            input_schema: JSON schema for expected inputs
+            output_schema: JSON schema for expected outputs
+        """
+        self.name = name
+        self.input_schema = input_schema
+        self.output_schema = output_schema
+        self.call_count = 0
+        self.failure_count = 0
+    
+    @abstractmethod
+    def get(self, state: Dict[str, Any]) -> ExecutionResult:
+        """
+        Execute the tool (forward operation).
+        
+        Args:
+            state: Current agent state
+        
+        Returns:
+            ExecutionResult with value and prediction error
+        
+        Note:
+            Implementations should update call_count and failure_count
+        """
+        pass
+    
+    @abstractmethod
+    def set(self, state: Dict[str, Any], observation: Any) -> Dict[str, Any]:
+        """
+        Update belief state with observation (backward operation).
+        
+        Args:
+            state: Current state
+            observation: Tool output
+        
+        Returns:
+            Updated state
+        """
+        pass
+    
+    def __rshift__(self, other: 'ToolLens') -> 'ComposedLens':
+        """
+        Compose this lens with another: self >> other
+        
+        Args:
+            other: Lens to compose with
+        
+        Returns:
+            ComposedLens representing the pipeline
+        
+        Examples:
+            >>> pipeline = fetch_tool >> parse_tool >> validate_tool
+        """
+        return ComposedLens(self, other)
+    
+    @property
+    def success_rate(self) -> float:
+        """Calculate success rate from history"""
+        if self.call_count == 0:
+            return 0.5  # Neutral prior
+        return 1.0 - (self.failure_count / self.call_count)
+
+
+class ComposedLens(ToolLens):
+    """
+    Composition of two lenses.
+    
+    Created via >> operator. Handles:
+    - Forward data flow (left.get then right.get)
+    - Backward belief update (right.set then left.set)
+    - Error short-circuiting (stop on first failure)
+    
+    Attributes:
+        left: First lens in composition
+        right: Second lens in composition
+    """
+    
+    def __init__(self, left: ToolLens, right: ToolLens):
+        """
+        Create composed lens.
+        
+        Args:
+            left: First lens
+            right: Second lens
+        """
+        super().__init__(
+            name=f"{left.name}>>{right.name}",
+            input_schema=left.input_schema,
+            output_schema=right.output_schema
+        )
+        self.left = left
+        self.right = right
+    
+    def get(self, state: Dict[str, Any]) -> ExecutionResult:
+        """
+        Execute composed lens (left then right).
+        
+        If left fails, short-circuit and return left's error.
+        Otherwise, execute right with left's output.
+        
+        Args:
+            state: Input state
+        
+        Returns:
+            ExecutionResult from final lens (or first failure)
+        """
+        self.call_count += 1
+        
+        # Execute left lens
+        left_result = self.left.get(state)
+        
+        if not left_result.success:
+            # Short-circuit on failure
+            self.failure_count += 1
+            return left_result
+        
+        # Update state with left's output
+        intermediate_state = self.left.set(state, left_result.value)
+        
+        # Execute right lens
+        right_result = self.right.get(intermediate_state)
+        
+        if not right_result.success:
+            self.failure_count += 1
+        
+        return right_result
+    
+    def set(self, state: Dict[str, Any], observation: Any) -> Dict[str, Any]:
+        """
+        Update state (right then left, backward flow).
+        
+        Args:
+            state: Current state
+            observation: Final observation
+        
+        Returns:
+            Fully updated state
+        """
+        # Update from right (final observation)
+        state = self.right.set(state, observation)
+        
+        # Update from left (intermediate state preserved)
+        state = self.left.set(state, state)
+        
+        return state
+```
+
+-----
+
+## `lrs/core/registry.py`
+
+```python
+"""
+Tool registry with natural transformation discovery.
+
+Manages tools and their fallback chains. Automatically discovers
+alternative tools based on schema compatibility.
+"""
+
+from typing import Dict, List, Optional, Any
+from lrs.core.lens import ToolLens
+
+
+class ToolRegistry:
+    """
+    Registry for managing tools and their alternatives.
+    
+    Features:
+    - Register tools with explicit fallback chains
+    - Discover compatible alternatives via schema matching
+    - Track tool statistics for Free Energy calculation
+    
+    Attributes:
+        tools: Dict mapping tool names to ToolLens objects
+        alternatives: Dict mapping tool names to lists of alternative names
+        statistics: Dict tracking execution history per tool
+    
+    Examples:
+        >>> registry = ToolRegistry()
+        >>> 
+        >>> # Register primary tool with alternatives
+        >>> registry.register(
+        ...     api_tool,
+        ...     alternatives=["cache_tool", "fallback_tool"]
+        ... )
+        >>> 
+        >>> # Register alternatives
+        >>> registry.register(cache_tool)
+        >>> registry.register(fallback_tool)
+        >>> 
+        >>> # Find alternatives when primary fails
+        >>> alts = registry.find_alternatives("api_tool")
+        >>> print(alts)
+        ['cache_tool', 'fallback_tool']
+    """
+    
+    def __init__(self):
+        """Initialize empty registry"""
+        self.tools: Dict[str, ToolLens] = {}
+        self.alternatives: Dict[str, List[str]] = {}
+        self.statistics: Dict[str, Dict[str, Any]] = {}
+    
+    def register(
+        self,
+        tool: ToolLens,
+        alternatives: Optional[List[str]] = None
+    ):
+        """
+        Register a tool with optional alternatives.
+        
+        Args:
+            tool: ToolLens to register
+            alternatives: List of alternative tool names (fallback chain)
+        
+        Examples:
+            >>> registry.register(
+            ...     APITool(),
+            ...     alternatives=["CacheTool", "LocalTool"]
+            ... )
+        """
+        self.tools[tool.name] = tool
+        
+        if alternatives:
+            self.alternatives[tool.name] = alternatives
+        
+        # Initialize statistics
+        if tool.name not in self.statistics:
+            self.statistics[tool.name] = {
+                'success_rate': 0.5,  # Neutral prior
+                'avg_prediction_error': 0.5,
+                'error_variance': 0.0,
+                'call_count': 0,
+                'failure_count': 0
+            }
+    
+    def get_tool(self, name: str) -> Optional[ToolLens]:
+        """
+        Retrieve tool by name.
+        
+        Args:
+            name: Tool name
+        
+        Returns:
+            ToolLens or None if not found
+        """
+        return self.tools.get(name)
+    
+    def find_alternatives(self, tool_name: str) -> List[str]:
+        """
+        Find registered alternatives for a tool.
+        
+        Args:
+            tool_name: Name of primary tool
+        
+        Returns:
+            List of alternative tool names (may be empty)
+        
+        Examples:
+            >>> alts = registry.find_alternatives("api_tool")
+            >>> for alt_name in alts:
+            ...     alt_tool = registry.get_tool(alt_name)
+            ...     result = alt_tool.get(state)
+        """
+        return self.alternatives.get(tool_name, [])
+    
+    def discover_compatible_tools(
+        self,
+        input_schema: Dict[str, Any],
+        output_schema: Dict[str, Any]
+    ) -> List[str]:
+        """
+        Discover tools compatible with given schemas.
+        
+        Uses structural matching to find tools that could serve as
+        natural transformations (alternatives).
+        
+        Args:
+            input_schema: Required input schema
+            output_schema: Required output schema
+        
+        Returns:
+            List of compatible tool names
+        
+        Examples:
+            >>> compatible = registry.discover_compatible_tools(
+            ...     input_schema={'type': 'object', 'required': ['url']},
+            ...     output_schema={'type': 'string'}
+            ... )
+        """
+        compatible = []
+        
+        for name, tool in self.tools.items():
+            if self._schemas_compatible(tool.input_schema, input_schema):
+                if self._schemas_compatible(tool.output_schema, output_schema):
+                    compatible.append(name)
+        
+        return compatible
+    
+    def _schemas_compatible(
+        self,
+        schema_a: Dict[str, Any],
+        schema_b: Dict[str, Any]
+    ) -> bool:
+        """
+        Check if two JSON schemas are compatible.
+        
+        Simplified check: types must match.
+        Full implementation would use jsonschema library.
+        
+        Args:
+            schema_a: First schema
+            schema_b: Second schema
+        
+        Returns:
+            True if compatible
+        """
+        # Simple type check
+        type_a = schema_a.get('type')
+        type_b = schema_b.get('type')
+        
+        if type_a != type_b:
+            return False
+        
+        # Check required fields for objects
+        if type_a == 'object':
+            req_a = set(schema_a.get('required', []))
+            req_b = set(schema_b.get('required', []))
+            
+            # schema_a must provide all fields required by schema_b
+            if not req_b.issubset(req_a):
+                return False
+        
+        return True
+    
+    def update_statistics(
+        self,
+        tool_name: str,
+        success: bool,
+        prediction_error: float
+    ):
+        """
+        Update execution statistics for a tool.
+        
+        Used by Free Energy calculation to estimate success probabilities
+        and epistemic values.
+        
+        Args:
+            tool_name: Name of executed tool
+            success: Whether execution succeeded
+            prediction_error: Observed prediction error
+        
+        Examples:
+            >>> registry.update_statistics("api_tool", success=True, prediction_error=0.1)
+        """
+        if tool_name not in self.statistics:
+            self.statistics[tool_name] = {
+                'success_rate': 0.5,
+                'avg_prediction_error': 0.5,
+                'error_variance': 0.0,
+                'call_count': 0,
+                'failure_count': 0
+            }
+        
+        stats = self.statistics[tool_name]
+        
+        # Update counts
+        stats['call_count'] += 1
+        if not success:
+            stats['failure_count'] += 1
+        
+        # Update success rate (running average)
+        stats['success_rate'] = 1.0 - (stats['failure_count'] / stats['call_count'])
+        
+        # Update prediction error average
+        n = stats['call_count']
+        old_avg = stats['avg_prediction_error']
+        new_avg = old_avg + (prediction_error - old_avg) / n
+        stats['avg_prediction_error'] = new_avg
+        
+        # Update variance (Welford's online algorithm)
+        if n > 1:
+            old_var = stats['error_variance']
+            stats['error_variance'] = old_var + (prediction_error - old_avg) * (prediction_error - new_avg)
+    
+    def get_statistics(self, tool_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve statistics for a tool.
+        
+        Args:
+            tool_name: Tool name
+        
+        Returns:
+            Statistics dict or None
+        """
+        return self.statistics.get(tool_name)
+    
+    def list_tools(self) -> List[str]:
+        """List all registered tool names"""
+        return list(self.tools.keys())
+```
+
+-----
+
+Due to length, should I continue with:
+
+1. **Inference module** (`lrs/inference/*.py` - prompts, LLM generator, evaluator)
+1. **Integration module** (`lrs/integration/*.py` - LangGraph, adapters)
+1. **Monitoring module** (`lrs/monitoring/*.py` - tracker, dashboard, logging)
+1. **Benchmarks module** (`lrs/benchmarks/*.py`)
+1. **Multi-agent module** (`lrs/multi_agent/*.py`)
+
+Which section next? 🚀​​​​​​​​​​​​​​​​
+

@@ -1,8 +1,10 @@
 """LLM-based policy generation for Active Inference."""
 
+import json
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from enum import Enum
+from unittest.mock import Mock, MagicMock
 
 from pydantic import BaseModel, Field, field_validator
 from langchain_core.language_models import BaseChatModel
@@ -11,7 +13,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from lrs.core.lens import ToolLens
 from lrs.core.registry import ToolRegistry
 from lrs.core.precision import PrecisionParameters
-from lrs.inference.prompts import MetaCognitivePrompter, StrategyMode
+from lrs.inference.prompts import MetaCognitivePrompter, StrategyMode, PromptContext
 
 
 class PolicyProposal(BaseModel):
@@ -118,7 +120,7 @@ class LLMPolicyGenerator:
             List of policy dictionaries with tools and metadata
         """
         # Generate prompt based on precision
-        prompt = self.prompter.generate_prompt(
+        prompt_context = PromptContext(
             precision=precision.value,
             available_tools=[tool.name for tool in self.registry.tools],
             goal=context.get('goal', 'Complete the task'),
@@ -126,6 +128,7 @@ class LLMPolicyGenerator:
             recent_errors=context.get('recent_errors', []),
             tool_history=context.get('tool_history', [])
         )
+        prompt = self.prompter.generate_prompt(prompt_context)
         
         # Call LLM
         messages = [
@@ -178,9 +181,52 @@ def create_mock_generator(num_proposals: int = 3) -> LLMPolicyGenerator:
     
     Returns generator that produces simple test proposals.
     """
-    from unittest.mock import Mock
+    # 1. Create a valid JSON response that the mock LLM will return.
+    # This response must conform to the PolicyProposalSet schema.
+    proposals_data = []
+    tool_names = []
+    for i in range(num_proposals):
+        tool_name = f"mock_tool_{i}"
+        tool_names.append(tool_name)
+        proposals_data.append({
+            "tool_sequence": [tool_name],
+            "reasoning": f"Reasoning for using {tool_name}",
+            "estimated_success_prob": 0.85,
+            "estimated_info_gain": 0.6,
+            "strategy": "balanced",
+            "failure_modes": ["It might fail if the input is wrong."]
+        })
+
+    response_data = {
+        "proposals": proposals_data,
+        "current_uncertainty": 0.3,
+        "known_unknowns": ["The exact format of the API response."]
+    }
+
+    # The response content must be a JSON string
+    json_response = json.dumps(response_data)
+
+    # 2. Configure the mock LLM to return the JSON response.
+    mock_llm = MagicMock()
+    mock_response = MagicMock()
+    mock_response.content = json_response
+    mock_llm.invoke.return_value = mock_response
     
-    mock_llm = Mock()
-    mock_registry = Mock()
+    # 3. Configure the mock ToolRegistry.
+    mock_registry = MagicMock()
+
+    # The generate_proposals method needs `registry.get_tool` to be callable
+    # and to return a tool object for the names in our mock response.
+    # It also needs `registry.tools` to be iterable for prompt generation.
+
+    # Create mock tools. Using MagicMock is fine for this purpose.
+    mock_tools = {}
+    for name in tool_names:
+        tool = MagicMock()
+        tool.name = name
+        mock_tools[name] = tool
+
+    mock_registry.get_tool.side_effect = lambda name: mock_tools.get(name)
+    mock_registry.tools = list(mock_tools.values())
     
     return LLMPolicyGenerator(llm=mock_llm, registry=mock_registry)

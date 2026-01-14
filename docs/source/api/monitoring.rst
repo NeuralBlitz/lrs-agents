@@ -208,3 +208,29 @@ Functions
    :param level: Logging level (INFO, DEBUG, etc.)
    :return: Configured LRSLogger
 
+Monitoring
+==========
+
+.. automodule:: lrs.monitoring.tracker
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: lrs.monitoring.structured_logging
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :no-index:
+
+Dashboard (Optional)
+--------------------
+
+.. note::
+   The dashboard module requires ``streamlit`` which is an optional dependency.
+   Install with: ``pip install lrs-agents[monitoring]``
+
+.. automodule:: lrs.monitoring.dashboard
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :ignore-module-all:

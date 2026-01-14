@@ -9,7 +9,8 @@ import json
 
 from lrs.core.lens import ToolLens, ExecutionResult
 from lrs.core.registry import ToolRegistry
-from lrs import create_lrs_agent
+from lrs.integration.langgraph import create_lrs_agent  # Direct import
+
 
 
 class AutoGPTCommand(ToolLens):

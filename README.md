@@ -2348,3 +2348,3493 @@ Due to length, should I continue with:
 
 Which section next? 🚀​​​​​​​​​​​​​​​​
 
+
+# Complete Inference Module Files
+
+-----
+
+## `lrs/inference/__init__.py`
+
+```python
+"""
+Inference components for LRS-Agents.
+
+This module provides:
+- Meta-cognitive prompting (precision-adaptive)
+- LLM policy generation (variational proposals)
+- Hybrid G evaluation (LLM + mathematical)
+"""
+
+from lrs.inference.prompts import MetaCognitivePrompter, PromptContext
+from lrs.inference.llm_policy_generator import LLMPolicyGenerator
+from lrs.inference.evaluator import HybridGEvaluator
+
+__all__ = [
+    "MetaCognitivePrompter",
+    "PromptContext",
+    "LLMPolicyGenerator",
+    "HybridGEvaluator",
+]
+```
+
+-----
+
+## `lrs/inference/prompts.py`
+
+```python
+"""
+Meta-cognitive prompting for LRS-Agents.
+
+Generates precision-adaptive prompts that guide LLMs to produce
+diverse policy proposals appropriate to the agent's epistemic state.
+"""
+
+from typing import Dict, List, Any, Optional
+from dataclasses import dataclass
+from enum import Enum
+
+
+class StrategyMode(Enum):
+    """Strategic mode based on precision level"""
+    EXPLOITATION = "exploit"  # High precision
+    EXPLORATION = "explore"   # Low precision
+    BALANCED = "balanced"     # Medium precision
+
+
+@dataclass
+class PromptContext:
+    """
+    Context for generating meta-cognitive prompts.
+    
+    Attributes:
+        precision: Current precision value [0, 1]
+        recent_errors: List of recent prediction errors
+        available_tools: List of tool names
+        goal: Current goal description
+        state: Current agent state
+        tool_history: Recent tool executions
+    """
+    precision: float
+    recent_errors: List[float]
+    available_tools: List[str]
+    goal: str
+    state: Dict[str, Any]
+    tool_history: List[Dict[str, Any]]
+
+
+class MetaCognitivePrompter:
+    """
+    Generates precision-adaptive prompts for LLM policy generation.
+    
+    The prompts adapt based on:
+    1. Precision level (confidence in world model)
+    2. Recent prediction errors (surprise events)
+    3. Available tools
+    4. Current goal
+    
+    Examples:
+        >>> prompter = MetaCognitivePrompter()
+        >>> 
+        >>> context = PromptContext(
+        ...     precision=0.3,  # Low precision
+        ...     recent_errors=[0.9, 0.85, 0.7],
+        ...     available_tools=["api_fetch", "cache_fetch"],
+        ...     goal="Fetch user data",
+        ...     state={},
+        ...     tool_history=[]
+        ... )
+        >>> 
+        >>> prompt = prompter.generate_prompt(context)
+        >>> print("EXPLORATION MODE" in prompt)
+        True
+    """
+    
+    def __init__(
+        self,
+        high_precision_threshold: float = 0.7,
+        low_precision_threshold: float = 0.4,
+        high_error_threshold: float = 0.7
+    ):
+        """
+        Initialize prompter.
+        
+        Args:
+            high_precision_threshold: Threshold for exploitation mode
+            low_precision_threshold: Threshold for exploration mode
+            high_error_threshold: Threshold for "high surprise"
+        """
+        self.high_precision_threshold = high_precision_threshold
+        self.low_precision_threshold = low_precision_threshold
+        self.high_error_threshold = high_error_threshold
+    
+    def generate_prompt(self, context: PromptContext) -> str:
+        """
+        Generate precision-adaptive prompt.
+        
+        Args:
+            context: Prompt context with precision, errors, tools, etc.
+        
+        Returns:
+            Complete prompt string for LLM
+        
+        Examples:
+            >>> prompt = prompter.generate_prompt(context)
+            >>> # Prompt includes precision value, strategy guidance, tool list
+        """
+        # Determine strategy mode
+        mode = self._determine_mode(context.precision)
+        
+        # Build prompt sections
+        header = self._build_header()
+        precision_info = self._build_precision_info(context.precision, mode)
+        strategy_guidance = self._build_strategy_guidance(mode, context)
+        error_analysis = self._build_error_analysis(context.recent_errors)
+        tool_context = self._build_tool_context(context.available_tools)
+        goal_description = self._build_goal_description(context.goal)
+        output_format = self._build_output_format()
+        diversity_requirements = self._build_diversity_requirements()
+        calibration_instructions = self._build_calibration_instructions()
+        
+        # Combine all sections
+        prompt = "\n\n".join([
+            header,
+            precision_info,
+            strategy_guidance,
+            error_analysis,
+            tool_context,
+            goal_description,
+            output_format,
+            diversity_requirements,
+            calibration_instructions
+        ])
+        
+        return prompt
+    
+    def _determine_mode(self, precision: float) -> StrategyMode:
+        """Determine strategic mode from precision value"""
+        if precision >= self.high_precision_threshold:
+            return StrategyMode.EXPLOITATION
+        elif precision <= self.low_precision_threshold:
+            return StrategyMode.EXPLORATION
+        else:
+            return StrategyMode.BALANCED
+    
+    def _build_header(self) -> str:
+        """Build prompt header"""
+        return """You are a Bayesian policy generator for an Active Inference agent.
+
+Your role is to PROPOSE diverse policy candidates, not to DECIDE which is best.
+The agent will evaluate your proposals using Expected Free Energy (G).
+
+Your proposals should span the exploration-exploitation spectrum based on
+the agent's current precision (confidence in its world model)."""
+    
+    def _build_precision_info(self, precision: float, mode: StrategyMode) -> str:
+        """Build precision information section"""
+        confidence_level = "HIGH" if precision > 0.7 else "LOW" if precision < 0.4 else "MEDIUM"
+        
+        return f"""CURRENT PRECISION (γ): {precision:.3f} ({confidence_level})
+
+This represents the agent's confidence that its world model is correct.
+- High precision (>0.7): Agent is confident → Focus on exploitation
+- Low precision (<0.4): Agent is uncertain → Focus on exploration
+- Medium precision: Balance both strategies
+
+CURRENT MODE: {mode.value.upper()}"""
+    
+    def _build_strategy_guidance(
+        self,
+        mode: StrategyMode,
+        context: PromptContext
+    ) -> str:
+        """Build strategy-specific guidance"""
+        if mode == StrategyMode.EXPLOITATION:
+            return """STRATEGIC GUIDANCE: EXPLOITATION MODE
+
+Your proposal strategy:
+1. Prioritize reward - Focus on proven, high-success approaches
+2. Leverage patterns - Use tools that have worked reliably before
+3. Minimize risk - Avoid experimental or untested combinations
+4. Optimize efficiency - Prefer shorter, well-understood policies
+
+Generate proposals with:
+- 70% exploitation (high success probability, low information gain)
+- 30% exploration (maintain some diversity)"""
+        
+        elif mode == StrategyMode.EXPLORATION:
+            return """STRATEGIC GUIDANCE: EXPLORATION MODE
+
+The agent's world model is unreliable. Prioritize learning over reward.
+
+Your proposal strategy:
+1. Prioritize information - Focus on reducing uncertainty
+2. Test assumptions - Include diagnostic actions that reveal environment state
+3. Accept risk - Exploratory policies may have lower immediate success
+4. Question patterns - Previous successful strategies may be outdated
+
+Generate proposals with:
+- 70% exploration (high information gain, lower certainty)
+- 30% exploitation (maintain some reliable options)"""
+        
+        else:  # BALANCED
+            return """STRATEGIC GUIDANCE: BALANCED MODE
+
+The agent has moderate confidence. Balance exploration and exploitation.
+
+Your proposal strategy:
+1. Mix approaches - Combine proven tools with experimental ones
+2. Hedge uncertainty - Include both safe and informative actions
+3. Gradual adaptation - Test small variations on known patterns
+4. Maintain optionality - Keep fallback plans available
+
+Generate proposals with:
+- 50% exploitation (reliable approaches)
+- 50% exploration (learning opportunities)"""
+    
+    def _build_error_analysis(self, recent_errors: List[float]) -> str:
+        """Build error analysis section"""
+        if not recent_errors:
+            return "RECENT ERRORS: None (no execution history yet)"
+        
+        avg_error = sum(recent_errors) / len(recent_errors)
+        high_errors = [e for e in recent_errors if e > self.high_error_threshold]
+        
+        analysis = f"""RECENT PREDICTION ERRORS: {len(recent_errors)} recent executions
+Average error: {avg_error:.3f}
+High-surprise events: {len(high_errors)}"""
+        
+        if high_errors:
+            analysis += f"""
+
+⚠️  RECENT SURPRISES DETECTED
+The agent has experienced {len(high_errors)} unexpected outcomes.
+This suggests the environment may have changed or tools are behaving differently.
+
+Consider:
+- Alternative approaches to recent failures
+- Diagnostic actions to understand what changed
+- Conservative strategies that fail gracefully"""
+        
+        return analysis
+    
+    def _build_tool_context(self, available_tools: List[str]) -> str:
+        """Build available tools section"""
+        tools_str = "\n".join(f"  - {tool}" for tool in available_tools)
+        
+        return f"""AVAILABLE TOOLS ({len(available_tools)} tools):
+{tools_str}
+
+You must only propose policies using these exact tool names.
+Policies can use the same tool multiple times if needed."""
+    
+    def _build_goal_description(self, goal: str) -> str:
+        """Build goal description section"""
+        return f"""GOAL: {goal}
+
+Your proposals should work toward this goal while respecting the
+current precision level and strategic mode."""
+    
+    def _build_output_format(self) -> str:
+        """Build output format specification"""
+        return """OUTPUT FORMAT
+
+Generate 3-7 policy proposals in JSON format:
+
+{
+  "proposals": [
+    {
+      "policy_id": 1,
+      "tools": ["tool_name_1", "tool_name_2"],
+      "estimated_success_prob": 0.8,
+      "expected_information_gain": 0.3,
+      "strategy": "exploit|explore|balanced",
+      "rationale": "Brief explanation of why this policy makes sense",
+      "failure_modes": ["Potential failure scenario 1", "Scenario 2"]
+    },
+    {
+      "policy_id": 2,
+      ...
+    }
+  ],
+  "current_uncertainty": 0.6,
+  "known_unknowns": ["What we know we don't know"]
+}
+
+FIELD DESCRIPTIONS:
+- policy_id: Unique integer ID (1, 2, 3, ...)
+- tools: List of tool names in execution order
+- estimated_success_prob: Your estimate of P(success) in [0, 1]
+- expected_information_gain: How much we'd learn in [0, 1]
+- strategy: "exploit", "explore", or "balanced"
+- rationale: 1-2 sentence explanation
+- failure_modes: List of ways this could fail"""
+    
+    def _build_diversity_requirements(self) -> str:
+        """Build diversity requirements"""
+        return """DIVERSITY REQUIREMENTS (CRITICAL)
+
+Your proposal set MUST include:
+1. At least 1 exploitative policy (estimated_success_prob > 0.7, low info_gain)
+2. At least 1 exploratory policy (high info_gain, lower success_prob)
+3. At least 1 balanced policy
+
+Do NOT generate 5 nearly-identical proposals. The agent needs genuine alternatives
+spanning different risk-reward tradeoffs.
+
+VARIETY CHECKLIST:
+☐ Different tool combinations
+☐ Different policy lengths (1-5 tools)
+☐ Different risk levels
+☐ Different information-gathering strategies"""
+    
+    def _build_calibration_instructions(self) -> str:
+        """Build calibration instructions"""
+        return """CALIBRATION INSTRUCTIONS
+
+⚠️  Avoid overconfidence: If you're uncertain, reflect that in lower success probabilities.
+
+✓ Be honest: The agent's mathematical evaluation will assess your proposals objectively.
+  Don't inflate success probabilities to make proposals look better.
+
+CALIBRATION TEST:
+If ALL your proposals have estimated_success_prob > 0.8, you're likely overconfident.
+Include riskier, more exploratory options with honest uncertainty estimates.
+
+The agent will COMBINE your generative creativity with rigorous mathematical evaluation.
+Your job is diverse proposal generation, not final decision-making."""
+
+
+def build_simple_prompt(
+    goal: str,
+    tools: List[str],
+    precision: float,
+    num_proposals: int = 5
+) -> str:
+    """
+    Build a simple prompt without full context.
+    
+    Convenience function for quick prompting.
+    
+    Args:
+        goal: Task goal
+        tools: Available tool names
+        precision: Current precision value
+        num_proposals: Number of proposals to generate
+    
+    Returns:
+        Prompt string
+    
+    Examples:
+        >>> prompt = build_simple_prompt(
+        ...     goal="Fetch data",
+        ...     tools=["api", "cache"],
+        ...     precision=0.5
+        ... )
+    """
+    context = PromptContext(
+        precision=precision,
+        recent_errors=[],
+        available_tools=tools,
+        goal=goal,
+        state={},
+        tool_history=[]
+    )
+    
+    prompter = MetaCognitivePrompter()
+    return prompter.generate_prompt(context)
+```
+
+-----
+
+## `lrs/inference/llm_policy_generator.py`
+
+```python
+"""
+LLM-based policy generation for LRS-Agents.
+
+Uses LLMs as variational proposal mechanisms - the LLM generates
+diverse policy candidates, which are then evaluated via Expected Free Energy.
+"""
+
+from typing import List, Dict, Any, Optional, Callable
+import json
+from pydantic import BaseModel, Field, validator
+
+from lrs.inference.prompts import MetaCognitivePrompter, PromptContext
+from lrs.core.registry import ToolRegistry
+from lrs.core.lens import ToolLens
+
+
+# Pydantic schemas for structured outputs
+
+class ToolCall(BaseModel):
+    """Single tool call in a policy"""
+    tool_name: str
+    description: Optional[str] = None
+
+
+class PolicyProposal(BaseModel):
+    """Single policy proposal from LLM"""
+    policy_id: int = Field(..., description="Unique policy identifier")
+    tools: List[str] = Field(..., description="List of tool names in execution order")
+    estimated_success_prob: float = Field(
+        ..., 
+        ge=0.0, 
+        le=1.0,
+        description="Estimated probability of success"
+    )
+    expected_information_gain: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Expected information gain (epistemic value)"
+    )
+    strategy: str = Field(
+        ...,
+        description="Strategy type: exploit, explore, or balanced"
+    )
+    rationale: str = Field(..., description="Explanation for this policy")
+    failure_modes: List[str] = Field(
+        default_factory=list,
+        description="Potential failure scenarios"
+    )
+    
+    @validator('strategy')
+    def validate_strategy(cls, v):
+        """Ensure strategy is valid"""
+        if v not in ['exploit', 'explore', 'balanced']:
+            raise ValueError(f"Strategy must be exploit, explore, or balanced, got {v}")
+        return v
+
+
+class PolicyProposalSet(BaseModel):
+    """Complete set of policy proposals"""
+    proposals: List[PolicyProposal] = Field(
+        ...,
+        min_items=3,
+        max_items=7,
+        description="List of policy proposals"
+    )
+    current_uncertainty: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description="LLM's assessment of current uncertainty"
+    )
+    known_unknowns: Optional[List[str]] = Field(
+        default_factory=list,
+        description="What we know we don't know"
+    )
+
+
+class LLMPolicyGenerator:
+    """
+    Generate policy proposals using an LLM.
+    
+    The LLM acts as a variational proposal mechanism:
+    1. Receives precision-adaptive prompt
+    2. Generates 3-7 diverse policy proposals
+    3. Each proposal includes self-assessment of success prob and info gain
+    
+    The mathematical components (G calculation, precision-weighted selection)
+    then evaluate and select from these proposals.
+    
+    Examples:
+        >>> from langchain_anthropic import ChatAnthropic
+        >>> 
+        >>> llm = ChatAnthropic(model="claude-sonnet-4-20250514")
+        >>> registry = ToolRegistry()
+        >>> # ... register tools ...
+        >>> 
+        >>> generator = LLMPolicyGenerator(llm, registry)
+        >>> 
+        >>> proposals = generator.generate_proposals(
+        ...     state={'goal': 'Fetch data'},
+        ...     precision=0.5
+        ... )
+        >>> 
+        >>> for p in proposals:
+        ...     print(f"Policy {p['policy_id']}: {p['strategy']}")
+    """
+    
+    def __init__(
+        self,
+        llm: Any,
+        registry: ToolRegistry,
+        prompter: Optional[MetaCognitivePrompter] = None,
+        temperature_fn: Optional[Callable[[float], float]] = None,
+        base_temperature: float = 0.7
+    ):
+        """
+        Initialize LLM policy generator.
+        
+        Args:
+            llm: Language model (LangChain-compatible)
+            registry: Tool registry
+            prompter: Optional custom prompter (default: MetaCognitivePrompter)
+            temperature_fn: Optional function mapping precision → temperature
+            base_temperature: Base temperature value
+        """
+        self.llm = llm
+        self.registry = registry
+        self.prompter = prompter or MetaCognitivePrompter()
+        self.base_temperature = base_temperature
+        
+        # Default temperature function: inverse relationship with precision
+        if temperature_fn is None:
+            self.temperature_fn = lambda p: base_temperature * (1.0 / (p + 0.1))
+        else:
+            self.temperature_fn = temperature_fn
+    
+    def generate_proposals(
+        self,
+        state: Dict[str, Any],
+        precision: float,
+        num_proposals: int = 5
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate policy proposals.
+        
+        Args:
+            state: Current agent state
+            precision: Current precision value
+            num_proposals: Target number of proposals (3-7)
+        
+        Returns:
+            List of validated proposals with tool sequences
+        
+        Examples:
+            >>> proposals = generator.generate_proposals(
+            ...     state={'goal': 'Fetch user data'},
+            ...     precision=0.3
+            ... )
+            >>> 
+            >>> # Low precision → exploratory proposals
+            >>> print([p['strategy'] for p in proposals])
+            ['explore', 'explore', 'balanced', 'explore', 'exploit']
+        """
+        # Build prompt context
+        context = self._build_context(state, precision)
+        
+        # Generate prompt
+        prompt = self.prompter.generate_prompt(context)
+        
+        # Adapt temperature based on precision
+        temperature = self._adapt_temperature(precision)
+        
+        # Call LLM with structured output
+        try:
+            response = self._call_llm(prompt, temperature)
+            
+            # Parse and validate
+            proposal_set = self._parse_response(response)
+            
+            # Convert to executable policies
+            validated = self._validate_and_convert(proposal_set.proposals)
+            
+            return validated
+        
+        except Exception as e:
+            # Fallback to empty proposals
+            print(f"Warning: LLM proposal generation failed: {e}")
+            return []
+    
+    def _build_context(
+        self,
+        state: Dict[str, Any],
+        precision: float
+    ) -> PromptContext:
+        """Build prompt context from state"""
+        # Extract recent errors from tool history
+        tool_history = state.get('tool_history', [])
+        recent_errors = [
+            entry.get('prediction_error', 0.5)
+            for entry in tool_history[-5:]  # Last 5 executions
+        ]
+        
+        # Get available tools
+        available_tools = self.registry.list_tools()
+        
+        # Extract goal
+        goal = state.get('belief_state', {}).get('goal', 'Unknown goal')
+        if not isinstance(goal, str):
+            goal = str(goal)
+        
+        return PromptContext(
+            precision=precision,
+            recent_errors=recent_errors,
+            available_tools=available_tools,
+            goal=goal,
+            state=state,
+            tool_history=tool_history
+        )
+    
+    def _adapt_temperature(self, precision: float) -> float:
+        """
+        Adapt LLM temperature based on precision.
+        
+        Low precision → high temperature → diverse exploration
+        High precision → low temperature → focused exploitation
+        
+        Args:
+            precision: Precision value in [0, 1]
+        
+        Returns:
+            Temperature value (typically in [0, 2])
+        """
+        temp = self.temperature_fn(precision)
+        
+        # Clamp to reasonable range
+        return max(0.1, min(2.0, temp))
+    
+    def _call_llm(self, prompt: str, temperature: float) -> str:
+        """
+        Call LLM with prompt.
+        
+        Handles different LLM interfaces (LangChain, OpenAI, etc.)
+        
+        Args:
+            prompt: Prompt string
+            temperature: Temperature value
+        
+        Returns:
+            LLM response text
+        """
+        # Try LangChain interface first
+        if hasattr(self.llm, 'invoke'):
+            from langchain_core.messages import HumanMessage
+            
+            messages = [HumanMessage(content=prompt)]
+            response = self.llm.invoke(messages, temperature=temperature)
+            
+            if hasattr(response, 'content'):
+                return response.content
+            else:
+                return str(response)
+        
+        # Try OpenAI interface
+        elif hasattr(self.llm, 'chat') and hasattr(self.llm.chat, 'completions'):
+            response = self.llm.chat.completions.create(
+                model=getattr(self.llm, 'model', 'gpt-4'),
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temperature,
+                response_format={"type": "json_object"}
+            )
+            return response.choices[0].message.content
+        
+        # Fallback: assume callable
+        else:
+            return self.llm(prompt, temperature=temperature)
+    
+    def _parse_response(self, response: str) -> PolicyProposalSet:
+        """
+        Parse LLM response into structured proposals.
+        
+        Args:
+            response: JSON string from LLM
+        
+        Returns:
+            Validated PolicyProposalSet
+        
+        Raises:
+            ValueError: If response is invalid
+        """
+        # Remove markdown code blocks if present
+        response = response.strip()
+        if response.startswith('```json'):
+            response = response[7:]
+        if response.startswith('```'):
+            response = response[3:]
+        if response.endswith('```'):
+            response = response[:-3]
+        response = response.strip()
+        
+        # Parse JSON
+        try:
+            data = json.loads(response)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON from LLM: {e}")
+        
+        # Validate with Pydantic
+        try:
+            proposal_set = PolicyProposalSet(**data)
+            return proposal_set
+        except Exception as e:
+            raise ValueError(f"Invalid proposal schema: {e}")
+    
+    def _validate_and_convert(
+        self,
+        proposals: List[PolicyProposal]
+    ) -> List[Dict[str, Any]]:
+        """
+        Validate tool names and convert to executable format.
+        
+        Filters out proposals with invalid tool names.
+        
+        Args:
+            proposals: List of policy proposals
+        
+        Returns:
+            List of validated proposals with ToolLens objects
+        """
+        validated = []
+        
+        for proposal in proposals:
+            try:
+                # Convert tool names to ToolLens objects
+                tool_sequence = []
+                for tool_name in proposal.tools:
+                    tool = self.registry.get_tool(tool_name)
+                    if tool is None:
+                        # Invalid tool name - skip this proposal
+                        raise ValueError(f"Unknown tool: {tool_name}")
+                    tool_sequence.append(tool)
+                
+                # Create validated proposal
+                validated.append({
+                    'policy_id': proposal.policy_id,
+                    'policy': tool_sequence,  # List of ToolLens objects
+                    'llm_success_prob': proposal.estimated_success_prob,
+                    'llm_info_gain': proposal.expected_information_gain,
+                    'strategy': proposal.strategy,
+                    'rationale': proposal.rationale,
+                    'failure_modes': proposal.failure_modes,
+                    'tool_names': proposal.tools  # Keep names for debugging
+                })
+            
+            except ValueError as e:
+                # Skip invalid proposals
+                print(f"Skipping invalid proposal {proposal.policy_id}: {e}")
+                continue
+        
+        return validated
+
+
+def create_mock_generator(registry: ToolRegistry) -> LLMPolicyGenerator:
+    """
+    Create a mock generator for testing (no real LLM needed).
+    
+    Args:
+        registry: Tool registry
+    
+    Returns:
+        LLMPolicyGenerator with mock LLM
+    
+    Examples:
+        >>> from unittest.mock import Mock
+        >>> registry = ToolRegistry()
+        >>> generator = create_mock_generator(registry)
+    """
+    from unittest.mock import Mock
+    
+    # Create mock LLM that returns valid JSON
+    mock_llm = Mock()
+    mock_llm.invoke = Mock(return_value=Mock(content="""
+    {
+      "proposals": [
+        {
+          "policy_id": 1,
+          "tools": ["tool_a"],
+          "estimated_success_prob": 0.8,
+          "expected_information_gain": 0.3,
+          "strategy": "exploit",
+          "rationale": "Test policy",
+          "failure_modes": []
+        }
+      ]
+    }
+    """))
+    
+    return LLMPolicyGenerator(mock_llm, registry)
+```
+
+-----
+
+## `lrs/inference/evaluator.py`
+
+```python
+"""
+Hybrid G evaluator combining LLM priors with mathematical calculations.
+
+Allows LLM's semantic understanding to inform Free Energy calculations
+while maintaining mathematical rigor.
+"""
+
+from typing import List, Dict, Any, Optional
+import numpy as np
+
+from lrs.core.free_energy import (
+    calculate_expected_free_energy,
+    calculate_epistemic_value,
+    calculate_pragmatic_value,
+    PolicyEvaluation
+)
+from lrs.core.lens import ToolLens
+
+
+class HybridGEvaluator:
+    """
+    Evaluate policies using both LLM priors and mathematical statistics.
+    
+    G_hybrid = (1 - λ) * G_math + λ * G_llm
+    
+    Where:
+    - G_math: Calculated from historical execution statistics
+    - G_llm: Derived from LLM's self-assessed success prob and info gain
+    - λ: Interpolation factor (adaptive based on precision)
+    
+    Intuition:
+    - Low precision → trust LLM more (world model unreliable, use semantics)
+    - High precision → trust math more (world model accurate, use statistics)
+    
+    Examples:
+        >>> evaluator = HybridGEvaluator()
+        >>> 
+        >>> # LLM proposal with self-assessment
+        >>> proposal = {
+        ...     'policy': [tool_a, tool_b],
+        ...     'llm_success_prob': 0.7,
+        ...     'llm_info_gain': 0.4
+        ... }
+        >>> 
+        >>> # Evaluate with hybrid approach
+        >>> G = evaluator.evaluate_hybrid(
+        ...     proposal, state, preferences, precision=0.5
+        ... )
+    """
+    
+    def __init__(
+        self,
+        lambda_fn: Optional[callable] = None,
+        epistemic_weight: float = 1.0
+    ):
+        """
+        Initialize hybrid evaluator.
+        
+        Args:
+            lambda_fn: Function mapping precision → interpolation weight
+                      Default: λ = 1 - precision (trust LLM when uncertain)
+            epistemic_weight: Weight for epistemic value in G calculation
+        """
+        self.epistemic_weight = epistemic_weight
+        
+        # Default lambda function: inverse of precision
+        # Low precision → high λ → trust LLM
+        # High precision → low λ → trust math
+        if lambda_fn is None:
+            self.lambda_fn = lambda p: 1.0 - p
+        else:
+            self.lambda_fn = lambda_fn
+    
+    def evaluate_hybrid(
+        self,
+        proposal: Dict[str, Any],
+        state: Dict[str, Any],
+        preferences: Dict[str, float],
+        precision: float,
+        historical_stats: Optional[Dict[str, Dict]] = None
+    ) -> float:
+        """
+        Evaluate policy using hybrid approach.
+        
+        Args:
+            proposal: Policy proposal with 'policy', 'llm_success_prob', 'llm_info_gain'
+            state: Current agent state
+            preferences: Reward function
+            precision: Current precision value
+            historical_stats: Optional execution history
+        
+        Returns:
+            Hybrid G value
+        
+        Examples:
+            >>> G = evaluator.evaluate_hybrid(proposal, state, preferences, precision=0.3)
+            >>> # Low precision → G weighted toward LLM's assessment
+        """
+        policy = proposal['policy']
+        
+        # Calculate mathematical G
+        G_math = calculate_expected_free_energy(
+            policy=policy,
+            state=state,
+            preferences=preferences,
+            historical_stats=historical_stats,
+            epistemic_weight=self.epistemic_weight
+        )
+        
+        # Calculate LLM-derived G
+        G_llm = self._calculate_llm_g(proposal, preferences)
+        
+        # Adaptive interpolation
+        lambda_weight = self.lambda_fn(precision)
+        
+        # Hybrid G
+        G_hybrid = (1 - lambda_weight) * G_math + lambda_weight * G_llm
+        
+        return G_hybrid
+    
+    def _calculate_llm_g(
+        self,
+        proposal: Dict[str, Any],
+        preferences: Dict[str, float]
+    ) -> float:
+        """
+        Calculate G from LLM's self-assessment.
+        
+        Uses the LLM's estimated success probability and information gain
+        to compute an Expected Free Energy value.
+        
+        Args:
+            proposal: Must contain 'llm_success_prob' and 'llm_info_gain'
+            preferences: Reward function
+        
+        Returns:
+            G value derived from LLM estimates
+        """
+        # Extract LLM assessments
+        success_prob = proposal.get('llm_success_prob', 0.5)
+        info_gain = proposal.get('llm_info_gain', 0.5)
+        
+        # Epistemic value ≈ info_gain (from LLM)
+        epistemic = info_gain * self.epistemic_weight
+        
+        # Pragmatic value ≈ expected reward (from LLM success prob)
+        success_reward = preferences.get('success', 0.0)
+        error_penalty = preferences.get('error', 0.0)
+        
+        pragmatic = success_prob * success_reward + (1 - success_prob) * error_penalty
+        
+        # G = Epistemic - Pragmatic
+        G_llm = epistemic - pragmatic
+        
+        return G_llm
+    
+    def evaluate_all(
+        self,
+        proposals: List[Dict[str, Any]],
+        state: Dict[str, Any],
+        preferences: Dict[str, float],
+        precision: float,
+        historical_stats: Optional[Dict[str, Dict]] = None
+    ) -> List[PolicyEvaluation]:
+        """
+        Evaluate multiple proposals.
+        
+        Args:
+            proposals: List of policy proposals
+            state: Current state
+            preferences: Reward function
+            precision: Current precision
+            historical_stats: Execution history
+        
+        Returns:
+            List of PolicyEvaluation objects
+        """
+        evaluations = []
+        
+        for proposal in proposals:
+            policy = proposal['policy']
+            
+            # Calculate hybrid G
+            G_hybrid = self.evaluate_hybrid(
+                proposal, state, preferences, precision, historical_stats
+            )
+            
+            # Also calculate pure mathematical G for comparison
+            G_math = calculate_expected_free_energy(
+                policy, state, preferences, historical_stats
+            )
+            
+            # Estimate success probability
+            if 'llm_success_prob' in proposal:
+                success_prob = proposal['llm_success_prob']
+            else:
+                success_prob = 0.5
+            
+            # Create evaluation
+            evaluation = PolicyEvaluation(
+                epistemic_value=proposal.get('llm_info_gain', 0.5),
+                pragmatic_value=success_prob,
+                total_G=G_hybrid,
+                expected_success_prob=success_prob,
+                components={
+                    'G_hybrid': G_hybrid,
+                    'G_math': G_math,
+                    'G_llm': self._calculate_llm_g(proposal, preferences),
+                    'lambda': self.lambda_fn(precision),
+                    'strategy': proposal.get('strategy', 'unknown')
+                }
+            )
+            
+            evaluations.append(evaluation)
+        
+        return evaluations
+
+
+def compare_math_vs_llm(
+    proposal: Dict[str, Any],
+    state: Dict[str, Any],
+    preferences: Dict[str, float],
+    historical_stats: Optional[Dict[str, Dict]] = None
+) -> Dict[str, float]:
+    """
+    Compare mathematical vs LLM-based G calculation.
+    
+    Useful for debugging and understanding how the hybrid evaluator works.
+    
+    Args:
+        proposal: Policy proposal with LLM assessments
+        state: Current state
+        preferences: Reward function
+        historical_stats: Execution history
+    
+    Returns:
+        Dict with 'G_math', 'G_llm', and 'difference'
+    
+    Examples:
+        >>> comparison = compare_math_vs_llm(proposal, state, preferences)
+        >>> print(f"Math G: {comparison['G_math']:.2f}")
+        >>> print(f"LLM G: {comparison['G_llm']:.2f}")
+        >>> print(f"Difference: {comparison['difference']:.2f}")
+    """
+    evaluator = HybridGEvaluator()
+    
+    policy = proposal['policy']
+    
+    # Mathematical G
+    G_math = calculate_expected_free_energy(
+        policy, state, preferences, historical_stats
+    )
+    
+    # LLM G
+    G_llm = evaluator._calculate_llm_g(proposal, preferences)
+    
+    return {
+        'G_math': G_math,
+        'G_llm': G_llm,
+        'difference': abs(G_math - G_llm)
+    }
+```
+
+-----
+
+This completes the **inference module**. Should I continue with:
+
+1. **Integration module** (`lrs/integration/*.py` - LangGraph, LangChain, OpenAI, AutoGPT)
+1. **Monitoring module** (`lrs/monitoring/*.py` - tracker, dashboard, logging)
+1. **Benchmarks module** (`lrs/benchmarks/*.py`)
+1. **Multi-agent module** (`lrs/multi_agent/*.py`)
+
+Which next? 🚀​​​​​​​​​​​​​​​​
+
+# Complete Integration Module Files
+
+-----
+
+## `lrs/integration/__init__.py`
+
+```python
+"""
+Integration components for LRS-Agents.
+
+This module provides integrations with:
+- LangGraph (native graph-based execution)
+- LangChain (tool adapters)
+- OpenAI Assistants API
+- AutoGPT
+"""
+
+from lrs.integration.langgraph import (
+    LRSGraphBuilder,
+    create_lrs_agent,
+    LRSState
+)
+from lrs.integration.langchain_adapter import (
+    LangChainToolLens,
+    wrap_langchain_tool
+)
+from lrs.integration.openai_assistants import (
+    OpenAIAssistantLens,
+    OpenAIAssistantPolicyGenerator,
+    create_openai_lrs_agent
+)
+from lrs.integration.autogpt_adapter import (
+    LRSAutoGPTAgent,
+    AutoGPTCommand,
+    convert_autogpt_to_lrs
+)
+
+__all__ = [
+    # LangGraph
+    "LRSGraphBuilder",
+    "create_lrs_agent",
+    "LRSState",
+    # LangChain
+    "LangChainToolLens",
+    "wrap_langchain_tool",
+    # OpenAI
+    "OpenAIAssistantLens",
+    "OpenAIAssistantPolicyGenerator",
+    "create_openai_lrs_agent",
+    # AutoGPT
+    "LRSAutoGPTAgent",
+    "AutoGPTCommand",
+    "convert_autogpt_to_lrs",
+]
+```
+
+-----
+
+## `lrs/integration/langgraph.py`
+
+```python
+"""
+LangGraph integration for LRS-Agents.
+
+Provides the main agent builder that creates a LangGraph execution graph
+with Active Inference dynamics (precision tracking, G calculation, adaptation).
+"""
+
+from typing import Dict, List, Any, Optional, TypedDict, Annotated
+import operator
+from langgraph.graph import StateGraph, END
+
+from lrs.core.precision import HierarchicalPrecision
+from lrs.core.free_energy import (
+    calculate_expected_free_energy,
+    evaluate_policy,
+    precision_weighted_selection
+)
+from lrs.core.registry import ToolRegistry
+from lrs.core.lens import ToolLens, ExecutionResult
+from lrs.inference.llm_policy_generator import LLMPolicyGenerator
+from lrs.monitoring.tracker import LRSStateTracker
+
+
+class LRSState(TypedDict, total=False):
+    """
+    Complete state schema for LRS agents.
+    
+    This is the state that flows through the LangGraph execution graph.
+    
+    Attributes:
+        messages: Conversation messages
+        belief_state: Agent's current beliefs about the world
+        precision: Precision values at each hierarchical level
+        prediction_errors: Recent prediction errors
+        current_policy: Currently executing policy
+        candidate_policies: Policies being considered
+        G_values: Expected Free Energy for each candidate
+        tool_history: History of tool executions
+        adaptation_count: Number of adaptations triggered
+        current_hbn_level: Current hierarchical level (abstract/planning/execution)
+        next: Next node to execute in graph
+    """
+    # Core state
+    messages: Annotated[List[Dict[str, str]], operator.add]
+    belief_state: Dict[str, Any]
+    
+    # Precision tracking
+    precision: Dict[str, float]
+    prediction_errors: Dict[str, List[float]]
+    
+    # Policy state
+    current_policy: List[ToolLens]
+    candidate_policies: List[Dict[str, Any]]
+    G_values: Dict[int, float]
+    
+    # History
+    tool_history: Annotated[List[Dict[str, Any]], operator.add]
+    adaptation_count: int
+    
+    # Hierarchical level
+    current_hbn_level: str
+    
+    # Graph routing
+    next: str
+
+
+class LRSGraphBuilder:
+    """
+    Builder for LangGraph-based LRS agents.
+    
+    Creates a StateGraph with nodes for:
+    1. Initialize - Set up initial state
+    2. Generate policies - Create candidate policies
+    3. Evaluate G - Calculate Expected Free Energy
+    4. Select policy - Precision-weighted selection
+    5. Execute tool - Run selected policy
+    6. Update precision - Bayesian belief update
+    
+    Conditional edges based on precision gates:
+    - γ > 0.7 → Execute (confident)
+    - 0.4 < γ < 0.7 → Replan (uncertain)
+    - γ < 0.4 → Escalate (confused)
+    
+    Examples:
+        >>> from langchain_anthropic import ChatAnthropic
+        >>> 
+        >>> llm = ChatAnthropic(model="claude-sonnet-4-20250514")
+        >>> registry = ToolRegistry()
+        >>> # ... register tools ...
+        >>> 
+        >>> builder = LRSGraphBuilder(llm, registry)
+        >>> agent = builder.build()
+        >>> 
+        >>> result = agent.invoke({
+        ...     "messages": [{"role": "user", "content": "Fetch data"}]
+        ... })
+    """
+    
+    def __init__(
+        self,
+        llm: Any,
+        registry: ToolRegistry,
+        preferences: Optional[Dict[str, float]] = None,
+        use_llm_proposals: bool = True,
+        tracker: Optional[LRSStateTracker] = None
+    ):
+        """
+        Initialize LRS graph builder.
+        
+        Args:
+            llm: Language model for policy generation
+            registry: Tool registry
+            preferences: Reward function (default: {'success': 5.0, 'error': -3.0})
+            use_llm_proposals: Use LLM for proposals (vs exhaustive search)
+            tracker: Optional state tracker for monitoring
+        """
+        self.llm = llm
+        self.registry = registry
+        self.preferences = preferences or {
+            'success': 5.0,
+            'error': -3.0,
+            'step_cost': -0.1
+        }
+        self.use_llm_proposals = use_llm_proposals
+        self.tracker = tracker
+        
+        # Initialize components
+        self.hp = HierarchicalPrecision()
+        
+        if use_llm_proposals:
+            self.llm_generator = LLMPolicyGenerator(llm, registry)
+    
+    def build(self) -> StateGraph:
+        """
+        Build and compile the LRS agent graph.
+        
+        Returns:
+            Compiled StateGraph ready for execution
+        """
+        # Create graph
+        workflow = StateGraph(LRSState)
+        
+        # Add nodes
+        workflow.add_node("initialize", self._initialize)
+        workflow.add_node("generate_policies", self._generate_policies)
+        workflow.add_node("evaluate_G", self._evaluate_G)
+        workflow.add_node("select_policy", self._select_policy)
+        workflow.add_node("execute_tool", self._execute_tool)
+        workflow.add_node("update_precision", self._update_precision)
+        
+        # Set entry point
+        workflow.set_entry_point("initialize")
+        
+        # Add edges
+        workflow.add_edge("initialize", "generate_policies")
+        workflow.add_edge("generate_policies", "evaluate_G")
+        workflow.add_edge("evaluate_G", "select_policy")
+        workflow.add_edge("select_policy", "execute_tool")
+        workflow.add_edge("execute_tool", "update_precision")
+        
+        # Add conditional edge from update_precision (precision gate)
+        workflow.add_conditional_edges(
+            "update_precision",
+            self._precision_gate,
+            {
+                "continue": "generate_policies",  # Continue execution
+                "end": END                         # Task complete
+            }
+        )
+        
+        # Compile
+        return workflow.compile()
+    
+    # Node implementations
+    
+    def _initialize(self, state: LRSState) -> LRSState:
+        """
+        Initialize agent state.
+        
+        Sets up precision, belief state, and history tracking.
+        """
+        # Initialize precision if not present
+        if not state.get('precision'):
+            state['precision'] = self.hp.get_all()
+        
+        # Initialize belief state
+        if not state.get('belief_state'):
+            state['belief_state'] = {}
+        
+        # Initialize history
+        if not state.get('tool_history'):
+            state['tool_history'] = []
+        
+        if not state.get('adaptation_count'):
+            state['adaptation_count'] = 0
+        
+        # Set hierarchical level
+        state['current_hbn_level'] = 'planning'
+        
+        return state
+    
+    def _generate_policies(self, state: LRSState) -> LRSState:
+        """
+        Generate candidate policies.
+        
+        Uses LLM proposals (if enabled) or exhaustive search.
+        """
+        if self.use_llm_proposals:
+            # LLM-based generation
+            proposals = self.llm_generator.generate_proposals(
+                state=state,
+                precision=state['precision'].get('planning', 0.5)
+            )
+        else:
+            # Exhaustive search (for small tool sets)
+            proposals = self._generate_policy_candidates(max_depth=3)
+        
+        state['candidate_policies'] = proposals
+        return state
+    
+    def _generate_policy_candidates(
+        self,
+        max_depth: int = 3
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate policies via exhaustive search.
+        
+        Only practical for small tool sets (<10 tools).
+        
+        Args:
+            max_depth: Maximum policy length
+        
+        Returns:
+            List of policy candidates
+        """
+        candidates = []
+        tools = list(self.registry.tools.values())
+        
+        def build_policies(current_policy, depth):
+            if depth == 0:
+                if current_policy:
+                    candidates.append({
+                        'policy': current_policy,
+                        'strategy': 'unknown'
+                    })
+                return
+            
+            # Add single-tool policy
+            if current_policy:
+                candidates.append({
+                    'policy': current_policy,
+                    'strategy': 'unknown'
+                })
+            
+            # Extend with each tool
+            for tool in tools:
+                build_policies(current_policy + [tool], depth - 1)
+        
+        # Generate all policies up to max_depth
+        build_policies([], max_depth)
+        
+        # Limit to reasonable number
+        return candidates[:20]
+    
+    def _evaluate_G(self, state: LRSState) -> LRSState:
+        """
+        Calculate Expected Free Energy for all candidate policies.
+        """
+        G_values = {}
+        
+        for i, proposal in enumerate(state['candidate_policies']):
+            policy = proposal['policy']
+            
+            # Calculate G
+            G = calculate_expected_free_energy(
+                policy=policy,
+                state=state,
+                preferences=self.preferences,
+                historical_stats=self.registry.statistics
+            )
+            
+            G_values[i] = G
+        
+        state['G_values'] = G_values
+        return state
+    
+    def _select_policy(self, state: LRSState) -> LRSState:
+        """
+        Select policy via precision-weighted softmax.
+        """
+        if not state['candidate_policies']:
+            state['current_policy'] = []
+            return state
+        
+        # Evaluate all policies
+        evaluations = []
+        for i, proposal in enumerate(state['candidate_policies']):
+            policy = proposal['policy']
+            G = state['G_values'][i]
+            
+            eval_obj = evaluate_policy(
+                policy=policy,
+                state=state,
+                preferences=self.preferences,
+                historical_stats=self.registry.statistics
+            )
+            eval_obj.total_G = G  # Override with calculated G
+            evaluations.append(eval_obj)
+        
+        # Precision-weighted selection
+        precision = state['precision'].get('planning', 0.5)
+        selected_idx = precision_weighted_selection(evaluations, precision)
+        
+        # Set current policy
+        state['current_policy'] = state['candidate_policies'][selected_idx]['policy']
+        
+        return state
+    
+    def _execute_tool(self, state: LRSState) -> LRSState:
+        """
+        Execute the selected policy.
+        
+        Runs each tool in sequence, tracking results.
+        """
+        if not state.get('current_policy'):
+            return state
+        
+        for tool in state['current_policy']:
+            # Execute tool
+            result = tool.get(state['belief_state'])
+            
+            # Update belief state
+            if result.success:
+                state['belief_state'] = tool.set(state['belief_state'], result.value)
+            
+            # Track execution
+            execution_entry = {
+                'tool': tool.name,
+                'success': result.success,
+                'prediction_error': result.prediction_error,
+                'error': result.error,
+                'result': result.value
+            }
+            
+            if 'tool_history' not in state:
+                state['tool_history'] = []
+            state['tool_history'].append(execution_entry)
+            
+            # Update registry statistics
+            self.registry.update_statistics(
+                tool_name=tool.name,
+                success=result.success,
+                prediction_error=result.prediction_error
+            )
+            
+            # Track with monitor
+            if self.tracker:
+                self.tracker.track_state(state)
+            
+            # Stop on failure
+            if not result.success:
+                break
+        
+        return state
+    
+    def _update_precision(self, state: LRSState) -> LRSState:
+        """
+        Update precision based on prediction errors.
+        
+        Implements Bayesian belief update via Beta distribution.
+        """
+        if not state.get('tool_history'):
+            return state
+        
+        # Get latest execution
+        latest = state['tool_history'][-1]
+        prediction_error = latest['prediction_error']
+        
+        # Update hierarchical precision
+        updated = self.hp.update('execution', prediction_error)
+        
+        # Store in state
+        state['precision'] = self.hp.get_all()
+        
+        # Check for adaptation
+        if state['precision']['execution'] < 0.4:
+            state['adaptation_count'] = state.get('adaptation_count', 0) + 1
+        
+        return state
+    
+    def _precision_gate(self, state: LRSState) -> str:
+        """
+        Conditional routing based on precision.
+        
+        Decides whether to continue execution or end.
+        
+        Returns:
+            "continue" or "end"
+        """
+        # Check if task is complete
+        belief_state = state.get('belief_state', {})
+        
+        # Simple completion check (can be customized)
+        if belief_state.get('completed', False):
+            return "end"
+        
+        # Check tool history
+        tool_history = state.get('tool_history', [])
+        
+        # End if max iterations reached
+        max_iterations = state.get('max_iterations', 50)
+        if len(tool_history) >= max_iterations:
+            return "end"
+        
+        # End if recent success
+        if tool_history and tool_history[-1]['success']:
+            # Check if goal appears met
+            if 'goal_met' in belief_state or 'data' in belief_state:
+                return "end"
+        
+        # Continue by default
+        return "continue"
+
+
+def create_lrs_agent(
+    llm: Any,
+    tools: List[ToolLens],
+    preferences: Optional[Dict[str, float]] = None,
+    use_llm_proposals: bool = True,
+    tracker: Optional[LRSStateTracker] = None
+) -> StateGraph:
+    """
+    Create an LRS agent (convenience function).
+    
+    Args:
+        llm: Language model
+        tools: List of ToolLens objects
+        preferences: Reward function
+        use_llm_proposals: Use LLM for policy generation
+        tracker: Optional state tracker
+    
+    Returns:
+        Compiled LangGraph agent
+    
+    Examples:
+        >>> from lrs import create_lrs_agent
+        >>> from langchain_anthropic import ChatAnthropic
+        >>> 
+        >>> llm = ChatAnthropic(model="claude-sonnet-4-20250514")
+        >>> tools = [MyTool(), AnotherTool()]
+        >>> 
+        >>> agent = create_lrs_agent(llm, tools)
+        >>> 
+        >>> result = agent.invoke({
+        ...     "messages": [{"role": "user", "content": "Solve task"}]
+        ... })
+    """
+    # Create registry
+    registry = ToolRegistry()
+    for tool in tools:
+        registry.register(tool)
+    
+    # Build agent
+    builder = LRSGraphBuilder(
+        llm=llm,
+        registry=registry,
+        preferences=preferences,
+        use_llm_proposals=use_llm_proposals,
+        tracker=tracker
+    )
+    
+    return builder.build()
+```
+
+-----
+
+## `lrs/integration/langchain_adapter.py`
+
+```python
+"""
+LangChain tool integration for LRS-Agents.
+
+Wraps LangChain tools as ToolLens objects with automatic prediction error calculation.
+"""
+
+from typing import Any, Dict, Optional, Callable
+import signal
+from langchain_core.tools import BaseTool
+
+from lrs.core.lens import ToolLens, ExecutionResult
+
+
+class LangChainToolLens(ToolLens):
+    """
+    Wrapper that converts LangChain tools to ToolLens.
+    
+    Automatically calculates prediction errors based on:
+    - Tool execution success/failure
+    - Output schema validation
+    - Execution time (timeouts)
+    
+    Examples:
+        >>> from langchain_community.tools import ShellTool
+        >>> 
+        >>> shell = ShellTool()
+        >>> lens = LangChainToolLens(shell)
+        >>> 
+        >>> result = lens.get({"commands": ["ls -la"]})
+        >>> print(result.prediction_error)  # 0.1 if success, 0.9 if failure
+    """
+    
+    def __init__(
+        self,
+        tool: BaseTool,
+        error_fn: Optional[Callable[[Any, Dict], float]] = None,
+        timeout: Optional[float] = None
+    ):
+        """
+        Initialize LangChain tool wrapper.
+        
+        Args:
+            tool: LangChain BaseTool instance
+            error_fn: Optional custom prediction error function
+                Signature: (result, expected_schema) -> float in [0, 1]
+            timeout: Optional timeout in seconds
+        """
+        # Extract schema from LangChain tool
+        input_schema = self._extract_input_schema(tool)
+        output_schema = self._extract_output_schema(tool)
+        
+        super().__init__(
+            name=tool.name,
+            input_schema=input_schema,
+            output_schema=output_schema
+        )
+        
+        self.tool = tool
+        self.error_fn = error_fn or self._default_error_fn
+        self.timeout = timeout
+    
+    def _extract_input_schema(self, tool: BaseTool) -> Dict:
+        """Extract input schema from LangChain tool"""
+        if hasattr(tool, 'args_schema') and tool.args_schema:
+            # Pydantic model to JSON schema
+            return tool.args_schema.schema()
+        else:
+            # Fallback to simple schema
+            return {
+                'type': 'object',
+                'properties': {
+                    'input': {'type': 'string'}
+                }
+            }
+    
+    def _extract_output_schema(self, tool: BaseTool) -> Dict:
+        """Extract expected output schema"""
+        # Most LangChain tools return strings
+        return {
+            'type': 'string',
+            'description': tool.description if hasattr(tool, 'description') else ''
+        }
+    
+    def get(self, state: dict) -> ExecutionResult:
+        """
+        Execute LangChain tool and calculate prediction error.
+        
+        Args:
+            state: Input state matching tool's args_schema
+        
+        Returns:
+            ExecutionResult with prediction_error based on outcome
+        """
+        self.call_count += 1
+        
+        try:
+            # Execute tool with timeout
+            if self.timeout:
+                # Set timeout signal
+                def timeout_handler(signum, frame):
+                    raise TimeoutError("Tool execution timed out")
+                
+                old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(int(self.timeout))
+            
+            # Call LangChain tool
+            result = self.tool.run(state)
+            
+            if self.timeout:
+                signal.alarm(0)  # Cancel timeout
+                signal.signal(signal.SIGALRM, old_handler)
+            
+            # Calculate prediction error
+            error = self.error_fn(result, self.output_schema)
+            
+            return ExecutionResult(
+                success=True,
+                value=result,
+                error=None,
+                prediction_error=error
+            )
+        
+        except TimeoutError as e:
+            self.failure_count += 1
+            if self.timeout:
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old_handler)
+            
+            return ExecutionResult(
+                success=False,
+                value=None,
+                error=f"Timeout after {self.timeout}s",
+                prediction_error=0.8  # Timeouts are surprising
+            )
+        
+        except Exception as e:
+            self.failure_count += 1
+            if self.timeout:
+                try:
+                    signal.alarm(0)
+                    signal.signal(signal.SIGALRM, old_handler)
+                except:
+                    pass
+            
+            return ExecutionResult(
+                success=False,
+                value=None,
+                error=str(e),
+                prediction_error=0.9  # Exceptions are very surprising
+            )
+    
+    def set(self, state: dict, observation: Any) -> dict:
+        """
+        Update belief state with tool output.
+        
+        Args:
+            state: Current belief state
+            observation: Tool output
+        
+        Returns:
+            Updated belief state
+        """
+        # Store output with tool name as key
+        return {
+            **state,
+            f'{self.name}_output': observation,
+            'last_tool': self.name
+        }
+    
+    def _default_error_fn(self, result: Any, expected_schema: Dict) -> float:
+        """
+        Default prediction error calculation.
+        
+        Heuristics:
+        - Empty/None result → 0.6 (moderate surprise)
+        - String result matches expected → 0.1 (low surprise)
+        - Unexpected type → 0.5 (medium surprise)
+        
+        Args:
+            result: Tool output
+            expected_schema: Expected output schema
+        
+        Returns:
+            Prediction error in [0, 1]
+        """
+        if result is None or result == "":
+            return 0.6
+        
+        expected_type = expected_schema.get('type', 'string')
+        
+        if expected_type == 'string' and isinstance(result, str):
+            return 0.1  # As expected
+        elif expected_type == 'number' and isinstance(result, (int, float)):
+            return 0.1
+        elif expected_type == 'boolean' and isinstance(result, bool):
+            return 0.1
+        elif expected_type == 'object' and isinstance(result, dict):
+            return 0.1
+        elif expected_type == 'array' and isinstance(result, list):
+            return 0.1
+        else:
+            return 0.5  # Type mismatch
+
+
+def wrap_langchain_tool(
+    tool: BaseTool,
+    **kwargs
+) -> LangChainToolLens:
+    """
+    Convenience function to wrap LangChain tools.
+    
+    Args:
+        tool: LangChain BaseTool
+        **kwargs: Passed to LangChainToolLens constructor
+    
+    Returns:
+        ToolLens wrapper
+    
+    Examples:
+        >>> from langchain_community.tools import ShellTool
+        >>> 
+        >>> lens = wrap_langchain_tool(ShellTool(), timeout=5.0)
+        >>> 
+        >>> # Use in LRS agent
+        >>> from lrs import create_lrs_agent
+        >>> agent = create_lrs_agent(llm, tools=[lens])
+    """
+    return LangChainToolLens(tool, **kwargs)
+```
+
+-----
+
+## `lrs/integration/openai_assistants.py`
+
+```python
+"""
+OpenAI Assistants API integration for LRS-Agents.
+
+Allows LRS agents to use OpenAI Assistants as policy generators while
+maintaining Active Inference dynamics for selection and adaptation.
+"""
+
+from typing import Dict, List, Optional, Any
+import json
+import time
+from openai import OpenAI
+from openai.types.beta import Assistant, Thread
+from openai.types.beta.threads import Run
+
+from lrs.core.lens import ToolLens, ExecutionResult
+from lrs.inference.prompts import MetaCognitivePrompter
+
+
+class OpenAIAssistantLens(ToolLens):
+    """
+    Wraps OpenAI Assistant as a ToolLens for LRS integration.
+    
+    The assistant generates policy proposals, while LRS evaluates them
+    via Expected Free Energy and tracks precision.
+    
+    Examples:
+        >>> from openai import OpenAI
+        >>> 
+        >>> client = OpenAI(api_key="...")
+        >>> assistant = client.beta.assistants.create(
+        ...     name="Policy Generator",
+        ...     instructions="Generate diverse policy proposals",
+        ...     model="gpt-4-turbo-preview"
+        ... )
+        >>> 
+        >>> lens = OpenAIAssistantLens(client, assistant.id)
+        >>> result = lens.get({"query": "Fetch data from API"})
+    """
+    
+    def __init__(
+        self,
+        client: OpenAI,
+        assistant_id: str,
+        thread_id: Optional[str] = None,
+        temperature: float = 0.7,
+        max_wait: int = 30
+    ):
+        """
+        Initialize OpenAI Assistant wrapper.
+        
+        Args:
+            client: OpenAI client instance
+            assistant_id: ID of the assistant to use
+            thread_id: Optional existing thread ID (creates new if None)
+            temperature: Sampling temperature (will be adapted by precision)
+            max_wait: Maximum seconds to wait for assistant response
+        """
+        super().__init__(
+            name="openai_assistant",
+            input_schema={
+                'type': 'object',
+                'required': ['query'],
+                'properties': {
+                    'query': {'type': 'string'},
+                    'precision': {'type': 'number'}
+                }
+            },
+            output_schema={
+                'type': 'object',
+                'properties': {
+                    'proposals': {'type': 'array'}
+                }
+            }
+        )
+        
+        self.client = client
+        self.assistant_id = assistant_id
+        self.base_temperature = temperature
+        self.max_wait = max_wait
+        
+        # Create or use existing thread
+        if thread_id:
+            self.thread_id = thread_id
+        else:
+            thread = self.client.beta.threads.create()
+            self.thread_id = thread.id
+    
+    def get(self, state: dict) -> ExecutionResult:
+        """
+        Query OpenAI Assistant for policy proposals.
+        
+        Args:
+            state: Must contain 'query' and optionally 'precision'
+        
+        Returns:
+            ExecutionResult with proposals or error
+        """
+        self.call_count += 1
+        
+        try:
+            query = state.get('query', 'Generate policy proposals')
+            precision = state.get('precision', 0.5)
+            
+            # Adapt temperature based on precision
+            adapted_temp = self._adapt_temperature(precision)
+            
+            # Create message in thread
+            self.client.beta.threads.messages.create(
+                thread_id=self.thread_id,
+                role="user",
+                content=query
+            )
+            
+            # Run assistant
+            run = self.client.beta.threads.runs.create(
+                thread_id=self.thread_id,
+                assistant_id=self.assistant_id,
+                temperature=adapted_temp
+            )
+            
+            # Wait for completion
+            response = self._wait_for_completion(run.id)
+            
+            # Parse proposals
+            proposals = self._parse_proposals(response)
+            
+            return ExecutionResult(
+                success=True,
+                value={'proposals': proposals},
+                error=None,
+                prediction_error=0.1
+            )
+        
+        except Exception as e:
+            self.failure_count += 1
+            return ExecutionResult(
+                success=False,
+                value=None,
+                error=str(e),
+                prediction_error=0.9
+            )
+    
+    def set(self, state: dict, observation: dict) -> dict:
+        """Update state with assistant proposals"""
+        return {
+            **state,
+            'assistant_proposals': observation.get('proposals', []),
+            'last_assistant_query': state.get('query')
+        }
+    
+    def _adapt_temperature(self, precision: float) -> float:
+        """Adapt temperature based on precision"""
+        return self.base_temperature * (1.0 / (precision + 0.1))
+    
+    def _wait_for_completion(self, run_id: str) -> str:
+        """Wait for assistant run to complete"""
+        start_time = time.time()
+        
+        while time.time() - start_time < self.max_wait:
+            run = self.client.beta.threads.runs.retrieve(
+                thread_id=self.thread_id,
+                run_id=run_id
+            )
+            
+            if run.status == 'completed':
+                messages = self.client.beta.threads.messages.list(
+                    thread_id=self.thread_id,
+                    order='desc',
+                    limit=1
+                )
+                
+                if messages.data:
+                    return messages.data[0].content[0].text.value
+                else:
+                    raise ValueError("No messages returned")
+            
+            elif run.status in ['failed', 'cancelled', 'expired']:
+                raise RuntimeError(f"Run failed with status: {run.status}")
+            
+            time.sleep(1)
+        
+        raise TimeoutError(f"Assistant didn't respond within {self.max_wait}s")
+    
+    def _parse_proposals(self, response: str) -> List[Dict]:
+        """Parse assistant response into structured proposals"""
+        try:
+            data = json.loads(response)
+            if isinstance(data, dict) and 'proposals' in data:
+                return data['proposals']
+            elif isinstance(data, list):
+                return data
+            else:
+                raise ValueError("Unexpected response format")
+        except json.JSONDecodeError:
+            return [{
+                'policy_id': 1,
+                'description': response,
+                'estimated_success_prob': 0.5,
+                'strategy': 'unknown'
+            }]
+
+
+class OpenAIAssistantPolicyGenerator:
+    """
+    High-level interface for using OpenAI Assistants as policy generators.
+    
+    Examples:
+        >>> from openai import OpenAI
+        >>> 
+        >>> client = OpenAI()
+        >>> generator = OpenAIAssistantPolicyGenerator(
+        ...     client=client,
+        ...     model="gpt-4-turbo-preview"
+        ... )
+        >>> 
+        >>> proposals = generator.generate_proposals(
+        ...     state={'goal': 'Fetch data'},
+        ...     precision=0.3,
+        ...     tool_registry=registry
+        ... )
+    """
+    
+    def __init__(
+        self,
+        client: OpenAI,
+        model: str = "gpt-4-turbo-preview",
+        assistant_id: Optional[str] = None
+    ):
+        """Initialize policy generator"""
+        self.client = client
+        self.model = model
+        
+        if assistant_id:
+            self.assistant_id = assistant_id
+        else:
+            self.assistant_id = self._create_assistant()
+        
+        self.lens = OpenAIAssistantLens(client, self.assistant_id)
+    
+    def _create_assistant(self) -> str:
+        """Create assistant with LRS-specific instructions"""
+        instructions = """You are a Bayesian policy generator for an Active Inference agent.
+
+Your role is to PROPOSE diverse policy candidates, not to DECIDE which is best.
+The agent will evaluate your proposals using Expected Free Energy (G).
+
+Generate 3-5 policy proposals in JSON format:
+
+{
+  "proposals": [
+    {
+      "policy_id": 1,
+      "tools": ["tool_name_1", "tool_name_2"],
+      "description": "Brief strategy description",
+      "estimated_success_prob": 0.8,
+      "expected_information_gain": 0.3,
+      "strategy": "exploit|explore|balanced",
+      "failure_modes": ["What could go wrong"]
+    }
+  ]
+}
+
+Adapt your strategy based on the agent's precision (confidence):
+- HIGH precision (>0.7): Focus on exploitation (proven patterns)
+- LOW precision (<0.4): Focus on exploration (gather information)
+- MEDIUM precision: Balance both
+
+Ensure diversity across the exploration-exploitation spectrum."""
+        
+        assistant = self.client.beta.assistants.create(
+            name="LRS Policy Generator",
+            instructions=instructions,
+            model=self.model,
+            response_format={"type": "json_object"}
+        )
+        
+        return assistant.id
+    
+    def generate_proposals(
+        self,
+        state: Dict,
+        precision: float,
+        tool_registry: Dict[str, Any]
+    ) -> List[Dict]:
+        """Generate policy proposals using assistant"""
+        tool_list = "\n".join([
+            f"- {name}: {tool.get('description', 'No description')}"
+            for name, tool in tool_registry.items()
+        ])
+        
+        query = f"""Goal: {state.get('goal', 'Unknown')}
+
+Available Tools:
+{tool_list}
+
+Current Precision: {precision:.3f}
+
+Generate policy proposals appropriate for this precision level."""
+        
+        result = self.lens.get({
+            'query': query,
+            'precision': precision
+        })
+        
+        if result.success:
+            return result.value.get('proposals', [])
+        else:
+            return []
+
+
+def create_openai_lrs_agent(
+    client: OpenAI,
+    tools: List[ToolLens],
+    model: str = "gpt-4-turbo-preview",
+    **kwargs
+) -> Any:
+    """
+    Create LRS agent using OpenAI Assistant for policy generation.
+    
+    Examples:
+        >>> from openai import OpenAI
+        >>> 
+        >>> client = OpenAI(api_key="...")
+        >>> tools = [ShellTool(), PythonTool()]
+        >>> 
+        >>> agent = create_openai_lrs_agent(client, tools)
+        >>> result = agent.invoke({
+        ...     "messages": [{"role": "user", "content": "Task"}]
+        ... })
+    """
+    from lrs import create_lrs_agent
+    from lrs.core.registry import ToolRegistry
+    
+    registry = ToolRegistry()
+    for tool in tools:
+        registry.register(tool)
+    
+    generator = OpenAIAssistantPolicyGenerator(client, model)
+    
+    from lrs.integration.langgraph import LRSGraphBuilder
+    
+    builder = LRSGraphBuilder(
+        llm=generator,
+        registry=registry,
+        **kwargs
+    )
+    
+    return builder.build()
+```
+
+-----
+
+## `lrs/integration/autogpt_adapter.py`
+
+```python
+"""
+AutoGPT integration for LRS-Agents.
+
+Replaces AutoGPT's command execution loop with LRS Active Inference dynamics.
+"""
+
+from typing import Dict, List, Any, Optional, Callable
+import json
+
+from lrs.core.lens import ToolLens, ExecutionResult
+from lrs.core.registry import ToolRegistry
+from lrs import create_lrs_agent
+
+
+class AutoGPTCommand(ToolLens):
+    """
+    Wraps AutoGPT command as ToolLens.
+    
+    AutoGPT commands are functions that agents can execute.
+    This wrapper adds prediction error tracking.
+    """
+    
+    def __init__(self, command_name: str, command_func: Callable, description: str):
+        """
+        Initialize AutoGPT command wrapper.
+        
+        Args:
+            command_name: Name of the command
+            command_func: Function to execute
+            description: Human-readable description
+        """
+        super().__init__(
+            name=command_name,
+            input_schema={
+                'type': 'object',
+                'properties': {
+                    'args': {'type': 'object'}
+                }
+            },
+            output_schema={'type': 'string'}
+        )
+        
+        self.command_func = command_func
+        self.description = description
+    
+    def get(self, state: dict) -> ExecutionResult:
+        """Execute AutoGPT command"""
+        self.call_count += 1
+        
+        try:
+            args = state.get('args', {})
+            result = self.command_func(**args)
+            
+            # Determine prediction error based on result
+            if isinstance(result, dict) and result.get('error'):
+                self.failure_count += 1
+                return ExecutionResult(
+                    success=False,
+                    value=None,
+                    error=result.get('error'),
+                    prediction_error=0.9
+                )
+            else:
+                return ExecutionResult(
+                    success=True,
+                    value=result,
+                    error=None,
+                    prediction_error=0.1
+                )
+        
+        except Exception as e:
+            self.failure_count += 1
+            return ExecutionResult(
+                success=False,
+                value=None,
+                error=str(e),
+                prediction_error=0.95
+            )
+    
+    def set(self, state: dict, observation: Any) -> dict:
+        """Update state with command result"""
+        return {
+            **state,
+            f'{self.name}_result': observation,
+            'last_command': self.name
+        }
+
+
+class LRSAutoGPTAgent:
+    """
+    AutoGPT agent powered by LRS Active Inference.
+    
+    Replaces AutoGPT's standard execution loop with:
+    - Precision tracking
+    - Expected Free Energy calculation
+    - Automatic adaptation on failures
+    
+    Examples:
+        >>> def browse_website(url: str) -> str:
+        ...     return requests.get(url).text
+        >>> 
+        >>> def write_file(filename: str, content: str) -> dict:
+        ...     with open(filename, 'w') as f:
+        ...         f.write(content)
+        ...     return {'status': 'success'}
+        >>> 
+        >>> agent = LRSAutoGPTAgent(
+        ...     name="ResearchAgent",
+        ...     role="Research assistant",
+        ...     commands={
+        ...         'browse': browse_website,
+        ...         'write': write_file
+        ...     }
+        ... )
+        >>> 
+        >>> result = agent.run("Research AI safety and write report")
+    """
+    
+    def __init__(
+        self,
+        name: str,
+        role: str,
+        commands: Dict[str, Callable],
+        llm: Any,
+        goals: Optional[List[str]] = None
+    ):
+        """
+        Initialize LRS AutoGPT agent.
+        
+        Args:
+            name: Agent name
+            role: Agent role description
+            commands: Dictionary of {name: function} commands
+            llm: Language model for policy generation
+            goals: Optional list of goals
+        """
+        self.name = name
+        self.role = role
+        self.goals = goals or []
+        
+        # Convert commands to ToolLens
+        self.registry = ToolRegistry()
+        for cmd_name, cmd_func in commands.items():
+            lens = AutoGPTCommand(
+                command_name=cmd_name,
+                command_func=cmd_func,
+                description=cmd_func.__doc__ or f"Execute {cmd_name}"
+            )
+            self.registry.register(lens)
+        
+        # Create LRS agent
+        self.agent = create_lrs_agent(
+            llm=llm,
+            tools=list(self.registry.tools.values()),
+            preferences={
+                'goal_achieved': 10.0,
+                'error': -5.0,
+                'cost': -0.1
+            }
+        )
+    
+    def run(self, task: str, max_iterations: int = 25) -> Dict:
+        """
+        Execute task using LRS dynamics.
+        
+        Args:
+            task: Task description
+            max_iterations: Maximum execution steps
+        
+        Returns:
+            Execution results with precision trajectory
+        """
+        state = {
+            'messages': [{
+                'role': 'user',
+                'content': f"""You are {self.name}, a {self.role}.
+
+Goals:
+{chr(10).join(f'- {goal}' for goal in self.goals)}
+
+Task: {task}
+
+Available commands: {', '.join(self.registry.tools.keys())}
+
+Generate a plan to achieve this task."""
+            }],
+            'belief_state': {
+                'task': task,
+                'goals': self.goals,
+                'completed': False
+            },
+            'max_iterations': max_iterations
+        }
+        
+        result = self.agent.invoke(state)
+        
+        return {
+            'success': result['belief_state'].get('completed', False),
+            'precision_trajectory': result.get('precision_history', []),
+            'adaptations': result.get('adaptation_count', 0),
+            'tool_usage': result.get('tool_history', []),
+            'final_state': result['belief_state']
+        }
+
+
+def convert_autogpt_to_lrs(
+    autogpt_config: Dict,
+    llm: Any
+) -> LRSAutoGPTAgent:
+    """
+    Convert AutoGPT configuration to LRS agent.
+    
+    Args:
+        autogpt_config: AutoGPT agent configuration
+            Must contain: 'name', 'role', 'commands'
+        llm: Language model
+    
+    Returns:
+        LRS-powered AutoGPT agent
+    
+    Examples:
+        >>> config = {
+        ...     'name': 'FileOrganizer',
+        ...     'role': 'File organization assistant',
+        ...     'commands': {
+        ...         'list_files': lambda path: os.listdir(path),
+        ...         'move_file': lambda src, dst: shutil.move(src, dst)
+        ...     },
+        ...     'goals': ['Organize files by type']
+        ... }
+        >>> 
+        >>> agent = convert_autogpt_to_lrs(config, llm)
+    """
+    return LRSAutoGPTAgent(
+        name=autogpt_config['name'],
+        role=autogpt_config['role'],
+        commands=autogpt_config['commands'],
+        llm=llm,
+        goals=autogpt_config.get('goals', [])
+    )
+```
+
+-----
+
+This completes the **integration module**. The repository now has all core functionality! Should I continue with:
+
+1. **Monitoring module** (`lrs/monitoring/*.py` - tracker, dashboard, logging)
+1. **Benchmarks module** (`lrs/benchmarks/*.py`)
+1. **Multi-agent module** (`lrs/multi_agent/*.py`)
+1. **Test files** (`tests/test_*.py`)
+1. **Example files** (`examples/*.py`)
+
+Which section next? 🚀​​​​​​​​​​​​​​​​
+
+# Complete Monitoring Module Files
+
+-----
+
+## `lrs/monitoring/__init__.py`
+
+```python
+"""
+Monitoring and observability for LRS-Agents.
+
+This module provides:
+- State tracking for history and analysis
+- Real-time Streamlit dashboard
+- Structured JSON logging for production
+"""
+
+from lrs.monitoring.tracker import LRSStateTracker
+from lrs.monitoring.dashboard import create_dashboard, run_dashboard
+from lrs.monitoring.structured_logging import LRSLogger, create_logger_for_agent
+
+__all__ = [
+    "LRSStateTracker",
+    "create_dashboard",
+    "run_dashboard",
+    "LRSLogger",
+    "create_logger_for_agent",
+]
+```
+
+-----
+
+## `lrs/monitoring/tracker.py`
+
+```python
+"""
+State tracking for LRS agents.
+
+Maintains a rolling history of agent states for analysis and visualization.
+"""
+
+from typing import List, Dict, Any, Optional
+from collections import deque
+from dataclimport dataclass
+from datetime import datetime
+import json
+
+
+@dataclass
+class StateSnapshot:
+    """
+    Snapshot of agent state at a specific point in time.
+    
+    Attributes:
+        timestamp: When this snapshot was taken
+        precision: Precision values at all levels
+        prediction_errors: Recent prediction errors
+        tool_history: Tool execution history
+        adaptation_count: Number of adaptations so far
+        belief_state: Current beliefs
+    """
+    timestamp: datetime
+    precision: Dict[str, float]
+    prediction_errors: List[float]
+    tool_history: List[Dict[str, Any]]
+    adaptation_count: int
+    belief_state: Dict[str, Any]
+
+
+class LRSStateTracker:
+    """
+    Tracks agent state history for monitoring and analysis.
+    
+    Maintains a rolling window of state snapshots with configurable size.
+    Used by the dashboard and for post-execution analysis.
+    
+    Examples:
+        >>> tracker = LRSStateTracker(max_history=100)
+        >>> 
+        >>> # Track state during execution
+        >>> for step in agent_execution:
+        ...     tracker.track_state(step)
+        >>> 
+        >>> # Analyze precision trajectory
+        >>> precision_history = tracker.get_precision_trajectory('execution')
+        >>> print(f"Average precision: {sum(precision_history) / len(precision_history)}")
+        >>> 
+        >>> # Get adaptation events
+        >>> adaptations = tracker.get_adaptation_events()
+        >>> print(f"Total adaptations: {len(adaptations)}")
+    """
+    
+    def __init__(self, max_history: int = 100):
+        """
+        Initialize state tracker.
+        
+        Args:
+            max_history: Maximum number of states to keep in history
+        """
+        self.max_history = max_history
+        self.history: deque = deque(maxlen=max_history)
+        self.adaptation_events: List[Dict[str, Any]] = []
+    
+    def track_state(self, state: Dict[str, Any]):
+        """
+        Track a new state snapshot.
+        
+        Args:
+            state: Current agent state (LRSState dict)
+        
+        Examples:
+            >>> tracker.track_state({
+            ...     'precision': {'execution': 0.7, 'planning': 0.6},
+            ...     'tool_history': [...],
+            ...     'belief_state': {...}
+            ... })
+        """
+        # Extract relevant information
+        precision = state.get('precision', {})
+        tool_history = state.get('tool_history', [])
+        adaptation_count = state.get('adaptation_count', 0)
+        belief_state = state.get('belief_state', {})
+        
+        # Extract recent prediction errors
+        recent_errors = []
+        if tool_history:
+            recent_errors = [
+                entry.get('prediction_error', 0.0)
+                for entry in tool_history[-10:]  # Last 10
+            ]
+        
+        # Create snapshot
+        snapshot = StateSnapshot(
+            timestamp=datetime.now(),
+            precision=precision.copy(),
+            prediction_errors=recent_errors,
+            tool_history=tool_history.copy(),
+            adaptation_count=adaptation_count,
+            belief_state=belief_state.copy()
+        )
+        
+        # Add to history
+        self.history.append(snapshot)
+        
+        # Check for adaptation events
+        if len(self.history) > 1:
+            prev_adaptations = self.history[-2].adaptation_count
+            curr_adaptations = adaptation_count
+            
+            if curr_adaptations > prev_adaptations:
+                # New adaptation occurred
+                self._record_adaptation_event(state)
+    
+    def _record_adaptation_event(self, state: Dict[str, Any]):
+        """Record an adaptation event with context"""
+        tool_history = state.get('tool_history', [])
+        precision = state.get('precision', {})
+        
+        # Find the tool that triggered adaptation
+        trigger_tool = None
+        trigger_error = None
+        
+        if tool_history:
+            latest = tool_history[-1]
+            if latest.get('prediction_error', 0) > 0.7:
+                trigger_tool = latest.get('tool')
+                trigger_error = latest.get('prediction_error')
+        
+        event = {
+            'timestamp': datetime.now().isoformat(),
+            'trigger_tool': trigger_tool,
+            'trigger_error': trigger_error,
+            'precision_before': self.history[-2].precision if len(self.history) > 1 else {},
+            'precision_after': precision,
+            'adaptation_number': state.get('adaptation_count', 0)
+        }
+        
+        self.adaptation_events.append(event)
+    
+    def get_precision_trajectory(self, level: str = 'execution') -> List[float]:
+        """
+        Get precision trajectory for a specific level.
+        
+        Args:
+            level: Precision level ('abstract', 'planning', or 'execution')
+        
+        Returns:
+            List of precision values over time
+        
+        Examples:
+            >>> trajectory = tracker.get_precision_trajectory('execution')
+            >>> import matplotlib.pyplot as plt
+            >>> plt.plot(trajectory)
+            >>> plt.show()
+        """
+        return [
+            snapshot.precision.get(level, 0.5)
+            for snapshot in self.history
+        ]
+    
+    def get_all_precision_trajectories(self) -> Dict[str, List[float]]:
+        """
+        Get precision trajectories for all levels.
+        
+        Returns:
+            Dict mapping level names to precision trajectories
+        """
+        return {
+            'abstract': self.get_precision_trajectory('abstract'),
+            'planning': self.get_precision_trajectory('planning'),
+            'execution': self.get_precision_trajectory('execution')
+        }
+    
+    def get_prediction_errors(self) -> List[float]:
+        """
+        Get all prediction errors from history.
+        
+        Returns:
+            Flat list of all prediction errors
+        """
+        errors = []
+        for snapshot in self.history:
+            errors.extend(snapshot.prediction_errors)
+        return errors
+    
+    def get_adaptation_events(self) -> List[Dict[str, Any]]:
+        """
+        Get all recorded adaptation events.
+        
+        Returns:
+            List of adaptation event dicts
+        """
+        return self.adaptation_events.copy()
+    
+    def get_tool_usage_stats(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Calculate tool usage statistics.
+        
+        Returns:
+            Dict mapping tool names to stats (calls, successes, avg_error)
+        
+        Examples:
+            >>> stats = tracker.get_tool_usage_stats()
+            >>> for tool, data in stats.items():
+            ...     print(f"{tool}: {data['success_rate']:.1%} success rate")
+        """
+        tool_stats = {}
+        
+        for snapshot in self.history:
+            for entry in snapshot.tool_history:
+                tool_name = entry.get('tool')
+                if not tool_name:
+                    continue
+                
+                if tool_name not in tool_stats:
+                    tool_stats[tool_name] = {
+                        'calls': 0,
+                        'successes': 0,
+                        'failures': 0,
+                        'total_error': 0.0,
+                        'errors': []
+                    }
+                
+                stats = tool_stats[tool_name]
+                stats['calls'] += 1
+                
+                if entry.get('success'):
+                    stats['successes'] += 1
+                else:
+                    stats['failures'] += 1
+                
+                error = entry.get('prediction_error', 0.0)
+                stats['total_error'] += error
+                stats['errors'].append(error)
+        
+        # Calculate derived stats
+        for tool_name, stats in tool_stats.items():
+            if stats['calls'] > 0:
+                stats['success_rate'] = stats['successes'] / stats['calls']
+                stats['avg_error'] = stats['total_error'] / stats['calls']
+            else:
+                stats['success_rate'] = 0.0
+                stats['avg_error'] = 0.0
+        
+        return tool_stats
+    
+    def get_current_state(self) -> Optional[StateSnapshot]:
+        """
+        Get most recent state snapshot.
+        
+        Returns:
+            Latest StateSnapshot or None if no history
+        """
+        if self.history:
+            return self.history[-1]
+        return None
+    
+    def export_history(self, filepath: str):
+        """
+        Export history to JSON file.
+        
+        Args:
+            filepath: Output file path
+        
+        Examples:
+            >>> tracker.export_history('agent_history.json')
+        """
+        data = {
+            'snapshots': [
+                {
+                    'timestamp': snapshot.timestamp.isoformat(),
+                    'precision': snapshot.precision,
+                    'prediction_errors': snapshot.prediction_errors,
+                    'tool_history': snapshot.tool_history,
+                    'adaptation_count': snapshot.adaptation_count,
+                    'belief_state': snapshot.belief_state
+                }
+                for snapshot in self.history
+            ],
+            'adaptation_events': self.adaptation_events
+        }
+        
+        with open(filepath, 'w') as f:
+            json.dump(data, f, indent=2)
+    
+    def clear(self):
+        """Clear all tracked history"""
+        self.history.clear()
+        self.adaptation_events.clear()
+    
+    def get_summary(self) -> Dict[str, Any]:
+        """
+        Get summary statistics of tracked execution.
+        
+        Returns:
+            Dict with summary metrics
+        
+        Examples:
+            >>> summary = tracker.get_summary()
+            >>> print(f"Total steps: {summary['total_steps']}")
+            >>> print(f"Adaptations: {summary['total_adaptations']}")
+        """
+        if not self.history:
+            return {
+                'total_steps': 0,
+                'total_adaptations': 0,
+                'avg_precision': 0.0,
+                'final_precision': {}
+            }
+        
+        precision_trajectories = self.get_all_precision_trajectories()
+        
+        # Calculate average precision across all levels
+        all_precisions = []
+        for trajectory in precision_trajectories.values():
+            all_precisions.extend(trajectory)
+        
+        avg_precision = sum(all_precisions) / len(all_precisions) if all_precisions else 0.0
+        
+        return {
+            'total_steps': len(self.history),
+            'total_adaptations': len(self.adaptation_events),
+            'avg_precision': avg_precision,
+            'final_precision': self.history[-1].precision,
+            'tool_usage': self.get_tool_usage_stats()
+        }
+```
+
+-----
+
+## `lrs/monitoring/dashboard.py`
+
+```python
+"""
+Real-time Streamlit dashboard for LRS agents.
+
+Provides visualization of:
+- Precision trajectories (3-level hierarchy)
+- G-space map (epistemic vs pragmatic)
+- Prediction error stream
+- Adaptation timeline
+- Tool usage statistics
+"""
+
+import streamlit as st
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+import numpy as np
+from typing import Optional, List, Dict, Any
+from datetime import datetime
+
+from lrs.monitoring.tracker import LRSStateTracker
+
+
+def create_dashboard(tracker: LRSStateTracker):
+    """
+    Create Streamlit dashboard for LRS agent monitoring.
+    
+    Args:
+        tracker: LRSStateTracker instance with execution history
+    
+    Examples:
+        >>> import streamlit as st
+        >>> from lrs.monitoring import create_dashboard
+        >>> 
+        >>> tracker = LRSStateTracker()
+        >>> # ... run agent with tracker ...
+        >>> 
+        >>> create_dashboard(tracker)
+    """
+    st.set_page_config(
+        page_title="LRS Agent Monitor",
+        page_icon="🧠",
+        layout="wide"
+    )
+    
+    st.title("🧠 LRS Agent Monitoring Dashboard")
+    st.markdown("Real-time Active Inference agent observability")
+    
+    # Sidebar with summary stats
+    _render_sidebar(tracker)
+    
+    # Main content
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        _render_precision_trajectories(tracker)
+        _render_prediction_error_stream(tracker)
+    
+    with col2:
+        _render_g_space_map(tracker)
+        _render_tool_usage(tracker)
+    
+    # Full-width sections
+    _render_adaptation_timeline(tracker)
+    _render_detailed_history(tracker)
+
+
+def _render_sidebar(tracker: LRSStateTracker):
+    """Render sidebar with summary statistics"""
+    st.sidebar.header("📊 Summary Statistics")
+    
+    summary = tracker.get_summary()
+    
+    st.sidebar.metric("Total Steps", summary['total_steps'])
+    st.sidebar.metric("Adaptations", summary['total_adaptations'])
+    st.sidebar.metric("Avg Precision", f"{summary['avg_precision']:.3f}")
+    
+    if summary['final_precision']:
+        st.sidebar.subheader("Current Precision")
+        for level, value in summary['final_precision'].items():
+            st.sidebar.metric(
+                level.capitalize(),
+                f"{value:.3f}",
+                delta=None
+            )
+    
+    # Export button
+    if st.sidebar.button("Export History"):
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filepath = f"lrs_history_{timestamp}.json"
+        tracker.export_history(filepath)
+        st.sidebar.success(f"Exported to {filepath}")
+
+
+def _render_precision_trajectories(tracker: LRSStateTracker):
+    """Render precision trajectory chart"""
+    st.subheader("📈 Precision Trajectories")
+    
+    trajectories = tracker.get_all_precision_trajectories()
+    
+    if not trajectories or not trajectories['execution']:
+        st.info("No data yet. Run agent to see precision trajectories.")
+        return
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    steps = range(len(trajectories['execution']))
+    
+    ax.plot(steps, trajectories['abstract'], 
+            label='Abstract', linewidth=2, alpha=0.8, color='blue')
+    ax.plot(steps, trajectories['planning'], 
+            label='Planning', linewidth=2, alpha=0.8, color='orange')
+    ax.plot(steps, trajectories['execution'], 
+            label='Execution', linewidth=2, alpha=0.8, color='green')
+    
+    # Threshold lines
+    ax.axhline(y=0.7, color='green', linestyle='--', alpha=0.3, label='High confidence')
+    ax.axhline(y=0.4, color='orange', linestyle='--', alpha=0.3, label='Adaptation threshold')
+    
+    ax.set_xlabel('Step')
+    ax.set_ylabel('Precision (γ)')
+    ax.set_title('Hierarchical Precision Over Time')
+    ax.legend(loc='best')
+    ax.grid(alpha=0.3)
+    ax.set_ylim([0, 1])
+    
+    st.pyplot(fig)
+    plt.close()
+    
+    # Current values
+    current = tracker.get_current_state()
+    if current:
+        cols = st.columns(3)
+        for i, (level, value) in enumerate(current.precision.items()):
+            with cols[i]:
+                st.metric(
+                    level.capitalize(),
+                    f"{value:.3f}",
+                    delta=None
+                )
+
+
+def _render_g_space_map(tracker: LRSStateTracker):
+    """Render G-space visualization"""
+    st.subheader("🎯 G-Space Map")
+    
+    # This requires G values from candidate policies
+    # For now, show a placeholder
+    st.info("G-space map shows epistemic vs pragmatic values for candidate policies.")
+    st.markdown("""
+    **Coming soon**: Scatter plot of:
+    - X-axis: Epistemic value (information gain)
+    - Y-axis: Pragmatic value (expected reward)
+    - Points: Candidate policies
+    - Highlight: Selected policy
+    """)
+
+
+def _render_prediction_error_stream(tracker: LRSStateTracker):
+    """Render prediction error timeline"""
+    st.subheader("⚠️ Prediction Error Stream")
+    
+    errors = tracker.get_prediction_errors()
+    
+    if not errors:
+        st.info("No prediction errors recorded yet.")
+        return
+    
+    fig, ax = plt.subplots(figsize=(10, 4))
+    
+    ax.bar(range(len(errors)), errors, color='red', alpha=0.6)
+    ax.axhline(y=0.7, color='orange', linestyle='--', alpha=0.5, label='High surprise')
+    ax.set_xlabel('Execution Step')
+    ax.set_ylabel('Prediction Error (ε)')
+    ax.set_title('Surprise Events Over Time')
+    ax.legend()
+    ax.grid(alpha=0.3)
+    ax.set_ylim([0, 1])
+    
+    st.pyplot(fig)
+    plt.close()
+    
+    # Statistics
+    avg_error = sum(errors) / len(errors)
+    high_errors = [e for e in errors if e > 0.7]
+    
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Avg Error", f"{avg_error:.3f}")
+    col2.metric("High Surprise Events", len(high_errors))
+    col3.metric("Max Error", f"{max(errors):.3f}")
+
+
+def _render_tool_usage(tracker: LRSStateTracker):
+    """Render tool usage statistics"""
+    st.subheader("🔧 Tool Usage Statistics")
+    
+    stats = tracker.get_tool_usage_stats()
+    
+    if not stats:
+        st.info("No tool executions yet.")
+        return
+    
+    # Create dataframe
+    df = pd.DataFrame([
+        {
+            'Tool': tool_name,
+            'Calls': data['calls'],
+            'Success Rate': data['success_rate'],
+            'Avg Error': data['avg_error']
+        }
+        for tool_name, data in stats.items()
+    ])
+    
+    # Display table
+    st.dataframe(
+        df.style.format({
+            'Success Rate': '{:.1%}',
+            'Avg Error': '{:.3f}'
+        }),
+        use_container_width=True
+    )
+    
+    # Visualization
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+    
+    # Success rates
+    ax1.barh(df['Tool'], df['Success Rate'], color='green', alpha=0.7)
+    ax1.set_xlabel('Success Rate')
+    ax1.set_title('Tool Reliability')
+    ax1.set_xlim([0, 1])
+    
+    # Call counts
+    ax2.barh(df['Tool'], df['Calls'], color='blue', alpha=0.7)
+    ax2.set_xlabel('Number of Calls')
+    ax2.set_title('Tool Usage Frequency')
+    
+    plt.tight_layout()
+    st.pyplot(fig)
+    plt.close()
+
+
+def _render_adaptation_timeline(tracker: LRSStateTracker):
+    """Render adaptation events timeline"""
+    st.subheader("🔄 Adaptation Timeline")
+    
+    events = tracker.get_adaptation_events()
+    
+    if not events:
+        st.info("No adaptations occurred yet.")
+        return
+    
+    for i, event in enumerate(events, 1):
+        with st.expander(f"Adaptation #{i} - {event.get('timestamp', 'Unknown time')}"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**Trigger**")
+                st.write(f"Tool: `{event.get('trigger_tool', 'Unknown')}`")
+                st.write(f"Error: {event.get('trigger_error', 0.0):.3f}")
+            
+            with col2:
+                st.markdown("**Precision Change**")
+                before = event.get('precision_before', {})
+                after = event.get('precision_after', {})
+                
+                for level in ['execution', 'planning', 'abstract']:
+                    b = before.get(level, 0.5)
+                    a = after.get(level, 0.5)
+                    delta = a - b
+                    st.write(f"{level}: {b:.3f} → {a:.3f} ({delta:+.3f})")
+
+
+def _render_detailed_history(tracker: LRSStateTracker):
+    """Render detailed execution history"""
+    st.subheader("📜 Execution History")
+    
+    if not tracker.history:
+        st.info("No execution history yet.")
+        return
+    
+    # Create detailed log
+    history_data = []
+    
+    for snapshot in tracker.history:
+        for entry in snapshot.tool_history:
+            history_data.append({
+                'Timestamp': snapshot.timestamp.strftime("%H:%M:%S"),
+                'Tool': entry.get('tool', 'Unknown'),
+                'Success': '✓' if entry.get('success') else '✗',
+                'Error': f"{entry.get('prediction_error', 0.0):.3f}",
+                'Precision': f"{snapshot.precision.get('execution', 0.5):.3f}"
+            })
+    
+    if history_data:
+        df = pd.DataFrame(history_data)
+        st.dataframe(df, use_container_width=True)
+
+
+def run_dashboard(tracker: Optional[LRSStateTracker] = None):
+    """
+    Run dashboard as standalone Streamlit app.
+    
+    Args:
+        tracker: Optional pre-populated tracker
+    
+    Examples:
+        >>> # In terminal:
+        >>> # streamlit run lrs/monitoring/dashboard.py
+        >>> 
+        >>> # Or programmatically:
+        >>> from lrs.monitoring import run_dashboard
+        >>> run_dashboard()
+    """
+    if tracker is None:
+        # Create demo tracker with sample data
+        tracker = _create_demo_tracker()
+    
+    create_dashboard(tracker)
+
+
+def _create_demo_tracker() -> LRSStateTracker:
+    """Create demo tracker with sample data for testing"""
+    tracker = LRSStateTracker()
+    
+    # Simulate some execution history
+    import random
+    
+    for i in range(20):
+        # Simulate precision changing
+        precision = {
+            'execution': max(0.2, min(0.9, 0.5 + random.gauss(0, 0.1))),
+            'planning': max(0.3, min(0.8, 0.5 + random.gauss(0, 0.08))),
+            'abstract': max(0.4, min(0.7, 0.5 + random.gauss(0, 0.05)))
+        }
+        
+        # Simulate tool execution
+        tool_name = random.choice(['api_fetch', 'cache_fetch', 'parse_json'])
+        success = random.random() > 0.3
+        pred_error = random.random() * (0.3 if success else 1.0)
+        
+        state = {
+            'precision': precision,
+            'tool_history': [{
+                'tool': tool_name,
+                'success': success,
+                'prediction_error': pred_error
+            }],
+            'adaptation_count': i // 5,  # Adapt every 5 steps
+            'belief_state': {}
+        }
+        
+        tracker.track_state(state)
+    
+    return tracker
+
+
+# Allow running as standalone app
+if __name__ == "__main__":
+    run_dashboard()
+```
+
+-----
+
+## `lrs/monitoring/structured_logging.py`
+
+```python
+"""
+Structured logging for LRS-Agents.
+
+Provides JSON-formatted logs for production monitoring and analysis.
+"""
+
+import logging
+import json
+import time
+from typing import Dict, Any, Optional
+from datetime import datetime
+from pathlib import Path
+
+
+class LRSLogger:
+    """
+    Structured logger for LRS agents.
+    
+    Logs events in JSON format for easy parsing and analysis.
+    Captures:
+    - Precision changes
+    - Policy selections
+    - Tool executions
+    - Adaptation events
+    - Performance metrics
+    
+    Examples:
+        >>> logger = LRSLogger(agent_id="agent_1", log_file="agent.jsonl")
+        >>> 
+        >>> logger.log_precision_update(
+        ...     level='execution',
+        ...     old_value=0.8,
+        ...     new_value=0.4,
+        ...     prediction_error=0.95
+        ... )
+        >>> 
+        >>> logger.log_tool_execution(
+        ...     tool_name="api_fetch",
+        ...     success=False,
+        ...     execution_time=0.5,
+        ...     prediction_error=0.9,
+        ...     error_message="Timeout"
+        ... )
+    """
+    
+    def __init__(
+        self,
+        agent_id: str,
+        log_file: Optional[str] = None,
+        console: bool = True,
+        level: int = logging.INFO
+    ):
+        """
+        Initialize structured logger.
+        
+        Args:
+            agent_id: Unique identifier for this agent
+            log_file: Optional file path for JSON logs
+            console: Whether to also log to console
+            level: Logging level
+        """
+        self.agent_id = agent_id
+        self.session_id = f"{agent_id}_{int(time.time())}"
+        
+        # Create logger
+        self.logger = logging.getLogger(f"lrs.{agent_id}")
+        self.logger.setLevel(level)
+        self.logger.propagate = False
+        
+        # Remove existing handlers
+        self.logger.handlers.clear()
+        
+        # JSON file handler
+        if log_file:
+            Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+            file_handler = logging.FileHandler(log_file)
+            file_handler.setFormatter(logging.Formatter('%(message)s'))
+            self.logger.addHandler(file_handler)
+        
+        # Console handler
+        if console:
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(
+                logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+            )
+            self.logger.addHandler(console_handler)
+    
+    def _log(self, event_type: str, data: Dict[str, Any], level: int = logging.INFO):
+        """Internal logging method"""
+        log_entry = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'agent_id': self.agent_id,
+            'session_id': self.session_id,
+            'event_type': event_type,
+            'data': data
+        }
+        
+        self.logger.log(level, json.dumps(log_entry))
+    
+    # Event-specific logging methods
+    
+    def log_precision_update(
+        self,
+        level: str,
+        old_value: float,
+        new_value: float,
+        prediction_error: float,
+        propagated: bool = False
+    ):
+        """
+        Log precision update event.
+        
+        Args:
+            level: Precision level (abstract/planning/execution)
+            old_value: Previous precision value
+            new_value: New precision value
+            prediction_error: Triggering prediction error
+            propagated: Whether error propagated from lower level
+        """
+        self._log('precision_update', {
+            'level': level,
+            'old_value': round(old_value, 4),
+            'new_value': round(new_value, 4),
+            'delta': round(new_value - old_value, 4),
+            'prediction_error': round(prediction_error, 4),
+            'propagated': propagated
+        })
+    
+    def log_policy_selection(
+        self,
+        policies: list,
+        selected_index: int,
+        G_values: list,
+        precision: float
+    ):
+        """
+        Log policy selection via G.
+        
+        Args:
+            policies: List of candidate policies
+            selected_index: Index of selected policy
+            G_values: Expected Free Energy values
+            precision: Current precision value
+        """
+        self._log('policy_selection', {
+            'num_policies': len(policies),
+            'selected_index': selected_index,
+            'G_values': [round(g, 4) for g in G_values],
+            'selected_G': round(G_values[selected_index], 4),
+            'precision': round(precision, 4)
+        })
+    
+    def log_tool_execution(
+        self,
+        tool_name: str,
+        success: bool,
+        execution_time: float,
+        prediction_error: float,
+        error_message: Optional[str] = None
+    ):
+        """
+        Log tool execution.
+        
+        Args:
+            tool_name: Name of executed tool
+            success: Whether execution succeeded
+            execution_time: Execution time in seconds
+            prediction_error: Observed prediction error
+            error_message: Error message if failed
+        """
+        self._log('tool_execution', {
+            'tool': tool_name,
+            'success': success,
+            'execution_time_ms': round(execution_time * 1000, 2),
+            'prediction_error': round(prediction_error, 4),
+            'error': error_message
+        }, level=logging.WARNING if not success else logging.INFO)
+    
+    def log_adaptation_event(
+        self,
+        trigger: str,
+        old_precision: Dict[str, float],
+        new_precision: Dict[str, float],
+        action_taken: str
+    ):
+        """
+        Log adaptation event.
+        
+        Args:
+            trigger: What triggered the adaptation
+            old_precision: Precision before adaptation
+            new_precision: Precision after adaptation
+            action_taken: Action taken by agent
+        """
+        self._log('adaptation', {
+            'trigger': trigger,
+            'old_precision': {k: round(v, 4) for k, v in old_precision.items()},
+            'new_precision': {k: round(v, 4) for k, v in new_precision.items()},
+            'action': action_taken
+        }, level=logging.WARNING)
+    
+    def log_performance_metrics(
+        self,
+        total_steps: int,
+        success_rate: float,
+        avg_precision: float,
+        adaptation_count: int,
+        execution_time: float
+    ):
+        """
+        Log aggregate performance metrics.
+        
+        Args:
+            total_steps: Total execution steps
+            success_rate: Overall success rate
+            avg_precision: Average precision value
+            adaptation_count: Number of adaptations
+            execution_time: Total execution time
+        """
+        self._log('performance_metrics', {
+            'total_steps': total_steps,
+            'success_rate': round(success_rate, 4),
+            'avg_precision': round(avg_precision, 4),
+            'adaptation_count': adaptation_count,
+            'total_time_s': round(execution_time, 2),
+            'steps_per_second': round(total_steps / execution_time, 2) if execution_time > 0 else 0
+        })
+    
+    def log_error(
+        self,
+        error_type: str,
+        message: str,
+        stack_trace: Optional[str] = None
+    ):
+        """
+        Log error event.
+        
+        Args:
+            error_type: Type of error
+            message: Error message
+            stack_trace: Optional stack trace
+        """
+        self._log('error', {
+            'error_type': error_type,
+            'message': message,
+            'stack_trace': stack_trace
+        }, level=logging.ERROR)
+
+
+def create_logger_for_agent(agent_id: str, **kwargs) -> LRSLogger:
+    """
+    Create logger for LRS agent.
+    
+    Args:
+        agent_id: Agent identifier
+        **kwargs: Passed to LRSLogger
+    
+    Returns:
+        Configured logger instance
+    
+    Examples:
+        >>> logger = create_logger_for_agent(
+        ...     "production_agent_1",
+        ...     log_file="logs/agent.jsonl",
+        ...     console=True
+        ... )
+    """
+    return LRSLogger(agent_id=agent_id, **kwargs)
+```
+
+-----
+
+This completes the **monitoring module**! The repository now has:
+
+- ✅ Core modules (precision, free energy, lens, registry)
+- ✅ Inference module (prompts, LLM generator, evaluator)
+- ✅ Integration module (LangGraph, LangChain, OpenAI, AutoGPT)
+- ✅ Monitoring module (tracker, dashboard, logging)
+
+Should I continue with:
+
+1. **Benchmarks module** (`lrs/benchmarks/*.py` - Chaos Scriptorium, GAIA)
+1. **Multi-agent module** (`lrs/multi_agent/*.py` - social precision, coordinator)
+1. **Test files** (`tests/test_*.py` - comprehensive test suite)
+1. **Example files** (`examples/*.py` - quickstart, benchmarks, demos)
+1. **GitHub workflows** (`.github/workflows/*.yml` - CI/CD)
+
+Which next? 🚀​​​​​​​​​​​​​​​​
+
+

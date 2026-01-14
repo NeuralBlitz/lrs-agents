@@ -1,14 +1,16 @@
 """
-Expected Free Energy calculation for Active Inference.
+Expected Free Energy calculation for policy evaluation.
 
-G = Epistemic Value - Pragmatic Value
-  = H[P(o|s)] - E[log P(o|C)]
-  = Information Gain - Expected Reward
+Implements the core active inference objective:
+    G(π) = E_Q(s|π)[H[P(o|s)]] - E_Q(s|π)[ln P(o|C)]
+         = Epistemic Value - Pragmatic Value
 
-Lower G is better (more desirable policies have lower expected free energy).
+Where:
+    - Epistemic Value: Expected information gain (exploration)
+    - Pragmatic Value: Expected reward under preferences (exploitation)
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Callable, Optional
 import numpy as np
 from dataclasses import dataclass
 
@@ -18,298 +20,294 @@ from lrs.core.lens import ToolLens
 @dataclass
 class PolicyEvaluation:
     """
-    Result of evaluating a policy's Expected Free Energy.
+    Complete evaluation of a policy's Expected Free Energy.
     
     Attributes:
-        epistemic_value: Information gain (uncertainty reduction)
-        pragmatic_value: Expected reward
-        total_G: Total free energy (epistemic - pragmatic)
-        expected_success_prob: Estimated probability of success
-        components: Detailed breakdown of G calculation
+        epistemic_value (float): Information gain H[P(o|s)].
+            Higher = more uncertainty reduction.
+        pragmatic_value (float): Expected reward E[ln P(o|C)].
+            Higher = better goal satisfaction.
+        total_G (float): G = Epistemic - Pragmatic.
+            Lower G = better policy (Free Energy minimization).
+        expected_success_prob (float): P(success|π) from historical stats.
+        components (Dict): Breakdown of G calculation for debugging.
     """
     epistemic_value: float
     pragmatic_value: float
     total_G: float
     expected_success_prob: float
-    components: Dict[str, Any]
+    components: Dict[str, float]
 
 
 def calculate_epistemic_value(
     policy: List[ToolLens],
-    state: Dict[str, Any],
-    historical_stats: Optional[Dict[str, Dict]] = None
+    state: Optional[Dict] = None
 ) -> float:
     """
-    Calculate epistemic value (information gain) for a policy.
+    Calculate epistemic value: expected information gain.
     
-    Epistemic value = H[P(o|s)] where H is entropy.
+    Epistemic value = Σ_t H[P(o_t | s_t)]
     
-    Higher epistemic value = more uncertain about outcomes = more learning potential
+    For each tool in the policy, calculate the entropy of predicted outcomes.
+    High entropy = high uncertainty = high information gain if executed.
     
-    Heuristics for estimating entropy:
-    1. Novel tools (never used) → high entropy
-    2. Tools with high variance in past outcomes → high entropy
-    3. Tools with consistent outcomes → low entropy
+    Implementation uses historical success rates as proxy for outcome distribution:
+        P(success) = 1 - (failures / total_calls)
+        P(failure) = failures / total_calls
+        H = -Σ p log p
     
     Args:
-        policy: Sequence of tools
-        state: Current agent state
-        historical_stats: Optional statistics from past executions
+        policy (List[ToolLens]): Sequence of tools to evaluate.
+        state (Dict, optional): Current belief state. Not used in basic version.
     
     Returns:
-        Epistemic value (higher = more informative)
+        float: Total epistemic value. Range: [0, len(policy)].
+            0 = deterministic outcomes (no information gain)
+            len(policy) = maximum uncertainty (uniform distribution)
     
     Examples:
-        >>> policy = [new_tool, established_tool]
-        >>> epistemic = calculate_epistemic_value(policy, state)
-        >>> print(epistemic)  # High due to new_tool
-        0.85
+        >>> tool1 = ToolLens(...)
+        >>> tool1.call_count = 10
+        >>> tool1.failure_count = 5  # p(success) = 0.5
+        >>> calculate_epistemic_value([tool1])
+        1.0  # Maximum entropy for binary outcome
+        
+        >>> tool2 = ToolLens(...)
+        >>> tool2.call_count = 10
+        >>> tool2.failure_count = 0  # p(success) = 1.0
+        >>> calculate_epistemic_value([tool2])
+        0.0  # No uncertainty
     """
-    if not policy:
-        return 0.0
-    
-    total_entropy = 0.0
+    total_epistemic = 0.0
     
     for tool in policy:
-        # Check if we have historical data
-        if historical_stats and tool.name in historical_stats:
-            stats = historical_stats[tool.name]
-            
-            # Estimate entropy from success/failure variance
-            success_rate = stats.get('success_rate', 0.5)
-            
-            # Binary entropy: H = -p*log(p) - (1-p)*log(1-p)
-            if 0 < success_rate < 1:
-                p = success_rate
-                entropy = -(p * np.log2(p + 1e-10) + (1-p) * np.log2(1-p + 1e-10))
-            else:
-                entropy = 0.0  # Deterministic
-            
-            # Add variance in prediction errors (if available)
-            error_variance = stats.get('error_variance', 0.0)
-            entropy += error_variance
-            
-            total_entropy += entropy
-        else:
-            # No historical data → high uncertainty
-            total_entropy += 1.0  # Maximum entropy for binary outcome
+        if tool.call_count == 0:
+            # Never tried = maximum epistemic value
+            total_epistemic += 1.0
+            continue
+        
+        # Calculate outcome probabilities
+        p_success = 1.0 - (tool.failure_count / tool.call_count)
+        p_failure = tool.failure_count / tool.call_count
+        
+        # Shannon entropy: H = -Σ p log p
+        entropy = 0.0
+        for p in [p_success, p_failure]:
+            if p > 0:  # Avoid log(0)
+                entropy -= p * np.log(p)
+        
+        total_epistemic += entropy
     
-    # Normalize by policy length
-    avg_entropy = total_entropy / len(policy)
-    
-    return avg_entropy
+    return total_epistemic
 
 
 def calculate_pragmatic_value(
     policy: List[ToolLens],
-    state: Dict[str, Any],
+    state: Dict,
     preferences: Dict[str, float],
-    historical_stats: Optional[Dict[str, Dict]] = None,
     discount_factor: float = 0.95
 ) -> float:
     """
-    Calculate pragmatic value (expected reward) for a policy.
+    Calculate pragmatic value: expected reward under preferences.
     
-    Pragmatic value = E[log P(o|C)] where C is preferences
+    Pragmatic value = Σ_t γ^t E_Q[ln P(o_t | C)]
     
-    Higher pragmatic value = more expected reward
+    Where:
+        - γ is temporal discount factor
+        - C represents goal preferences
+        - P(o|C) is likelihood of observation given preferences
+    
+    Implementation:
+        1. Simulate policy execution (forward model)
+        2. Calculate reward at each step based on preferences
+        3. Apply temporal discounting
     
     Args:
-        policy: Sequence of tools
-        state: Current agent state
-        preferences: Reward weights (e.g., {'success': 5.0, 'error': -3.0})
-        historical_stats: Optional statistics from past executions
-        discount_factor: Temporal discount for multi-step policies
+        policy (List[ToolLens]): Sequence of tools to evaluate.
+        state (Dict): Current belief state.
+        preferences (Dict[str, float]): Goal preferences.
+            Keys are state features, values are reward weights.
+            Example: {'file_loaded': 2.0, 'error': -5.0}
+        discount_factor (float): Temporal discount γ ∈ [0, 1].
+            Higher = more weight on immediate rewards.
     
     Returns:
-        Pragmatic value (higher = more rewarding)
+        float: Total pragmatic value. Higher = better goal satisfaction.
     
     Examples:
-        >>> policy = [reliable_tool]
-        >>> pragmatic = calculate_pragmatic_value(
-        ...     policy, state, preferences={'success': 5.0}
-        ... )
-        >>> print(pragmatic)
-        4.5
+        >>> preferences = {'data_retrieved': 3.0, 'error': -5.0}
+        >>> policy = [fetch_tool, parse_tool]
+        >>> calculate_pragmatic_value(policy, state, preferences)
+        5.7  # Discounted sum of expected rewards
     """
-    if not policy:
-        return 0.0
+    total_pragmatic = 0.0
+    current_state = state.copy()
     
-    total_reward = 0.0
-    cumulative_discount = 1.0
-    
-    for i, tool in enumerate(policy):
-        # Estimate success probability
-        if historical_stats and tool.name in historical_stats:
-            success_prob = historical_stats[tool.name].get('success_rate', 0.5)
-        else:
-            success_prob = 0.5  # Neutral prior
+    for t, tool in enumerate(policy):
+        # Simulate tool execution (using historical stats)
+        p_success = 1.0 - (tool.failure_count / (tool.call_count + 1))
         
         # Calculate expected reward for this step
-        success_reward = preferences.get('success', 0.0)
-        error_penalty = preferences.get('error', 0.0)
-        step_cost = preferences.get('step_cost', 0.0)
+        step_reward = 0.0
         
-        expected_reward = (
-            success_prob * success_reward +
-            (1 - success_prob) * error_penalty +
-            step_cost
-        )
+        for feature, weight in preferences.items():
+            # Check if tool's output schema includes this feature
+            if feature in tool.output_schema.get('required', []):
+                # Weight by success probability
+                step_reward += weight * p_success
+            elif feature == 'error':
+                # Penalize expected failures
+                step_reward += weight * (1 - p_success)
         
         # Apply temporal discount
-        total_reward += cumulative_discount * expected_reward
-        cumulative_discount *= discount_factor
+        discounted_reward = (discount_factor ** t) * step_reward
+        total_pragmatic += discounted_reward
+        
+        # Simulate state update for next tool
+        # (In full implementation, would use tool.set())
+        current_state['step'] = t + 1
     
-    return total_reward
+    return total_pragmatic
 
 
 def calculate_expected_free_energy(
     policy: List[ToolLens],
-    state: Dict[str, Any],
+    state: Dict,
     preferences: Dict[str, float],
-    historical_stats: Optional[Dict[str, Dict]] = None,
-    epistemic_weight: float = 1.0
-) -> float:
-    """
-    Calculate Expected Free Energy for a policy.
-    
-    G = Epistemic Value - Pragmatic Value
-    
-    Lower G is better:
-    - High epistemic value (learning) → Lower G
-    - High pragmatic value (reward) → Lower G
-    
-    Args:
-        policy: Sequence of tools to evaluate
-        state: Current agent state
-        preferences: Reward function
-        historical_stats: Optional execution history
-        epistemic_weight: Weight for epistemic term (default: 1.0)
-    
-    Returns:
-        G value (lower is better)
-    
-    Examples:
-        >>> policy = [fetch_tool, parse_tool]
-        >>> G = calculate_expected_free_energy(
-        ...     policy, state, preferences={'success': 5.0, 'error': -2.0}
-        ... )
-        >>> print(G)
-        -2.3
-    """
-    epistemic = calculate_epistemic_value(policy, state, historical_stats)
-    pragmatic = calculate_pragmatic_value(policy, state, preferences, historical_stats)
-    
-    # G = Epistemic - Pragmatic
-    # (but we weight the epistemic term)
-    G = epistemic_weight * epistemic - pragmatic
-    
-    return G
-
-
-def evaluate_policy(
-    policy: List[ToolLens],
-    state: Dict[str, Any],
-    preferences: Dict[str, float],
-    historical_stats: Optional[Dict[str, Dict]] = None
+    discount_factor: float = 0.95
 ) -> PolicyEvaluation:
     """
-    Fully evaluate a policy and return detailed breakdown.
+    Complete Expected Free Energy calculation: G(π) = Epistemic - Pragmatic
+    
+    This is the core objective function for active inference agents.
+    Policies are selected to MINIMIZE G, which balances:
+        - Minimizing uncertainty (epistemic value)
+        - Maximizing reward (pragmatic value)
     
     Args:
-        policy: Policy to evaluate
-        state: Current state
-        preferences: Reward function
-        historical_stats: Execution history
+        policy (List[ToolLens]): Candidate policy to evaluate.
+        state (Dict): Current belief state.
+        preferences (Dict[str, float]): Goal preferences.
+        discount_factor (float): Temporal discount factor.
     
     Returns:
-        PolicyEvaluation with detailed components
+        PolicyEvaluation: Complete breakdown of G calculation.
+    
+    Theoretical Background:
+        In the Free Energy Principle (Friston, 2010), agents minimize
+        Expected Free Energy to balance exploration and exploitation:
+        
+        - Low precision (γ) → High epistemic weight → Exploration
+        - High precision (γ) → High pragmatic weight → Exploitation
+        
+        This provides a principled alternative to ε-greedy or UCB.
     
     Examples:
-        >>> evaluation = evaluate_policy(policy, state, preferences)
-        >>> print(f"G: {evaluation.total_G:.2f}")
-        >>> print(f"Success prob: {evaluation.expected_success_prob:.2%}")
+        >>> policy = [tool1, tool2]
+        >>> state = {'goal': 'extract_data'}
+        >>> preferences = {'data_extracted': 5.0, 'error': -3.0}
+        >>> 
+        >>> eval_result = calculate_expected_free_energy(
+        ...     policy, state, preferences
+        ... )
+        >>> print(eval_result.total_G)
+        -2.3  # Negative = good (more pragmatic than epistemic)
+        >>> 
+        >>> print(eval_result.components)
+        {'epistemic': 0.7, 'pragmatic': 3.0, 'G': -2.3}
     """
-    epistemic = calculate_epistemic_value(policy, state, historical_stats)
-    pragmatic = calculate_pragmatic_value(policy, state, preferences, historical_stats)
+    # Calculate components
+    epistemic = calculate_epistemic_value(policy, state)
+    pragmatic = calculate_pragmatic_value(policy, state, preferences, discount_factor)
+    
+    # G = Epistemic - Pragmatic
     G = epistemic - pragmatic
     
-    # Estimate success probability
-    if historical_stats and policy:
-        probs = [
-            historical_stats.get(tool.name, {}).get('success_rate', 0.5)
-            for tool in policy
-        ]
-        # Joint probability (assuming independence)
-        success_prob = np.prod(probs)
-    else:
-        success_prob = 0.5 ** len(policy) if policy else 0.0
+    # Calculate expected success probability
+    success_probs = [
+        1.0 - (tool.failure_count / (tool.call_count + 1))
+        for tool in policy
+    ]
+    expected_success = np.prod(success_probs) if success_probs else 0.0
     
     return PolicyEvaluation(
         epistemic_value=epistemic,
         pragmatic_value=pragmatic,
         total_G=G,
-        expected_success_prob=success_prob,
+        expected_success_prob=expected_success,
         components={
             'epistemic': epistemic,
             'pragmatic': pragmatic,
+            'G': G,
             'policy_length': len(policy),
-            'tool_names': [t.name for t in policy]
+            'mean_tool_experience': np.mean([t.call_count for t in policy])
         }
     )
 
 
 def precision_weighted_selection(
-    policies: List[PolicyEvaluation],
+    evaluations: List[PolicyEvaluation],
     precision: float,
     temperature: float = 1.0
 ) -> int:
     """
-    Select policy via precision-weighted softmax over G values.
+    Select policy index via precision-weighted softmax over G values.
     
-    P(policy) ∝ exp(-γ · G / T)
+    Selection probability: P(π_i) ∝ exp(-γ * G_i / T)
     
     Where:
-    - γ (precision): High → sharp softmax (exploitation)
-                     Low → flat softmax (exploration)
-    - T (temperature): Scaling factor
+        - γ (precision): Confidence in world model
+        - G_i: Expected Free Energy of policy i
+        - T: Temperature (exploration parameter)
+    
+    High precision (γ → 1):
+        Softmax becomes sharper → exploit best policy
+    
+    Low precision (γ → 0):
+        Softmax flattens → explore alternatives
     
     Args:
-        policies: List of evaluated policies
-        precision: Precision value in [0, 1]
-        temperature: Temperature scaling (default: 1.0)
+        evaluations (List[PolicyEvaluation]): Evaluated candidate policies.
+        precision (float): Current precision value γ ∈ [0, 1].
+        temperature (float): Softmax temperature. Higher = more exploration.
     
     Returns:
-        Index of selected policy
+        int: Index of selected policy.
+    
+    Raises:
+        ValueError: If evaluations is empty.
     
     Examples:
-        >>> policies = [
-        ...     PolicyEvaluation(0.8, 3.0, -2.2, 0.7, {}),  # Best G
-        ...     PolicyEvaluation(0.9, 2.0, -1.1, 0.6, {}),
+        >>> evals = [
+        ...     PolicyEvaluation(epistemic=0.5, pragmatic=2.0, total_G=-1.5, ...),
+        ...     PolicyEvaluation(epistemic=0.8, pragmatic=1.0, total_G=-0.2, ...)
         ... ]
         >>> 
-        >>> # High precision → likely selects policy 0 (best G)
-        >>> idx = precision_weighted_selection(policies, precision=0.9)
+        >>> # High precision → exploit (choose lowest G)
+        >>> precision_weighted_selection(evals, precision=0.9)
+        0  # Policy with G=-1.5
         >>> 
-        >>> # Low precision → more random exploration
-        >>> idx = precision_weighted_selection(policies, precision=0.2)
+        >>> # Low precision → explore (more random)
+        >>> precision_weighted_selection(evals, precision=0.2)
+        1  # Might choose suboptimal policy
     """
-    if not policies:
-        return 0
+    if not evaluations:
+        raise ValueError("Cannot select from empty evaluations")
     
     # Extract G values
-    G_values = np.array([p.total_G for p in policies])
+    G_values = np.array([e.total_G for e in evaluations])
     
-    # Apply precision-weighted softmax
-    # High precision → sharp selection (low effective temperature)
-    # Low precision → flat selection (high effective temperature)
-    effective_temp = temperature / (precision + 1e-10)
+    # Precision-weighted softmax: exp(-γ * G / T)
+    scaled_G = -precision * G_values / temperature
     
-    # Softmax: exp(-G/T) / sum(exp(-G/T))
-    exp_values = np.exp(-G_values / effective_temp)
-    probabilities = exp_values / np.sum(exp_values)
+    # Numerical stability: subtract max before exp
+    scaled_G = scaled_G - np.max(scaled_G)
+    exp_vals = np.exp(scaled_G)
+    
+    # Softmax probabilities
+    probs = exp_vals / np.sum(exp_vals)
     
     # Sample from distribution
-    selected_idx = np.random.choice(len(policies), p=probabilities)
+    selected_idx = np.random.choice(len(evaluations), p=probs)
     
     return selected_idx

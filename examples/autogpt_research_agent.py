@@ -1,13 +1,3 @@
-"""
-AutoGPT Research Agent: LRS-powered AutoGPT for research tasks.
-
-This example demonstrates:
-- Converting AutoGPT commands to LRS tools
-- Automatic adaptation in research workflows
-- Precision tracking across research steps
-- Handling research failures gracefully
-"""
-
 from langchain_anthropic import ChatAnthropic
 from lrs.integration.autogpt_adapter import LRSAutoGPTAgent
 import requests

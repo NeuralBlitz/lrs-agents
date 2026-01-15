@@ -13,4 +13,14 @@ from lrs.integration.langgraph import create_lrs_agent
 __all__ = [
     "create_lrs_agent",
     "__version__",
+"""LRS-Agents: Resilient AI agents via Active Inference."""
+
+__version__ = "0.2.0"
+
+# Export main entry point
+from lrs.integration.langgraph import create_lrs_agent
+
+__all__ = [
+    "__version__",
+    "create_lrs_agent",
 ]

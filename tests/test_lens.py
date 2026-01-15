@@ -1,6 +1,4 @@
-"""
-Tests for ToolLens and composition.
-"""
+"""Tests for ToolLens and composition."""
 
 import pytest
 

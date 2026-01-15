@@ -1,12 +1,3 @@
-"""
-Chaos Scriptorium: Test agent resilience in volatile environments.
-
-This example demonstrates:
-- Running the Chaos benchmark
-- Comparing LRS vs baseline agents
-- Analyzing adaptation patterns
-"""
-
 from langchain_anthropic import ChatAnthropic
 from lrs.benchmarks.chaos_scriptorium import run_chaos_benchmark
 import matplotlib.pyplot as plt

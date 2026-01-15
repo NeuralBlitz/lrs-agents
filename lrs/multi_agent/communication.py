@@ -1,24 +1,24 @@
-"""
-Communication tools for multi-agent systems.
+"""Communication mechanisms for multi-agent LRS systems."""
 
-Messages are information-seeking actions that reduce social Free Energy.
-"""
-
-from typing import Any, Dict, Optional
+from typing import Dict, Any, Optional, List, Callable
 from dataclasses import dataclass
-from enum import Enum
 from datetime import datetime
+from enum import Enum  # ADD THIS
 
 from lrs.core.lens import ToolLens, ExecutionResult
+from lrs.multi_agent.social_precision import SocialPrecisionTracker
 
 
 class MessageType(Enum):
-    """Types of inter-agent messages"""
-    QUERY = "query"              # Ask for information
-    INFORM = "inform"            # Share information
-    REQUEST = "request"          # Request action
-    ACKNOWLEDGE = "acknowledge"  # Confirm receipt
-    ERROR = "error"              # Report problem
+    """Types of messages agents can send."""
+    
+    INFORMATION_REQUEST = "information_request"
+    INFORMATION_SHARE = "information_share"
+    COORDINATION_REQUEST = "coordination_request"
+    BELIEF_UPDATE = "belief_update"
+    PRECISION_SIGNAL = "precision_signal"
+
+# ... rest of the file
 
 
 @dataclass

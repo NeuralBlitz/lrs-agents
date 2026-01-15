@@ -1,53 +1,66 @@
-"""
-LangChain tool integration for LRS-Agents.
+"""LangChain integration for LRS-Agents."""
 
-Wraps LangChain tools as ToolLens objects with automatic prediction error calculation.
-"""
+from typing import Dict, Any, Optional, Callable
+import time
+import platform
+import threading
 
-from typing import Any, Dict, Optional, Callable
-import signal
-from langchain_core.tools import BaseTool
+from langchain.tools import BaseTool
 
 from lrs.core.lens import ToolLens, ExecutionResult
 
 
+def _extract_input_schema(tool: BaseTool) -> Dict[str, Any]:
+    """Extract input schema from LangChain tool."""
+    if hasattr(tool, 'args_schema') and tool.args_schema:
+        try:
+            # Try Pydantic V2 method first
+            return tool.args_schema.model_json_schema()
+        except AttributeError:
+            # Fall back to Pydantic V1
+            return tool.args_schema.schema()
+    return {}
+
+
+def _extract_output_schema(tool: BaseTool) -> Dict[str, Any]:
+    """Extract output schema from LangChain tool."""
+    # Most LangChain tools return strings or dicts
+    return {
+        "type": "object",
+        "properties": {
+            "result": {"type": "string"}
+        }
+    }
+
+
 class LangChainToolLens(ToolLens):
     """
-    Wrapper that converts LangChain tools to ToolLens.
+    Wraps a LangChain tool as a ToolLens.
     
-    Automatically calculates prediction errors based on:
-    - Tool execution success/failure
-    - Output schema validation
-    - Execution time (timeouts)
+    Provides timeout handling, prediction error calculation,
+    and statistics tracking for any LangChain tool.
     
-    Examples:
-        >>> from langchain_community.tools import ShellTool
-        >>> 
-        >>> shell = ShellTool()
-        >>> lens = LangChainToolLens(shell)
-        >>> 
-        >>> result = lens.get({"commands": ["ls -la"]})
-        >>> print(result.prediction_error)  # 0.1 if success, 0.9 if failure
+    Args:
+        tool: LangChain BaseTool to wrap
+        timeout: Maximum execution time in seconds (default: 30.0)
+        error_fn: Custom function to calculate prediction error
+    
+    Example:
+        >>> from langchain.tools import Tool
+        >>> lc_tool = Tool(name="search", func=lambda q: f"Results for {q}")
+        >>> lrs_tool = LangChainToolLens(lc_tool, timeout=10.0)
+        >>> result = lrs_tool.get({"query": "test"})
     """
     
     def __init__(
         self,
         tool: BaseTool,
-        error_fn: Optional[Callable[[Any, Dict], float]] = None,
-        timeout: Optional[float] = None
+        timeout: float = 30.0,
+        error_fn: Optional[Callable] = None
     ):
-        """
-        Initialize LangChain tool wrapper.
-        
-        Args:
-            tool: LangChain BaseTool instance
-            error_fn: Optional custom prediction error function
-                Signature: (result, expected_schema) -> float in [0, 1]
-            timeout: Optional timeout in seconds
-        """
-        # Extract schema from LangChain tool
-        input_schema = self._extract_input_schema(tool)
-        output_schema = self._extract_output_schema(tool)
+        """Initialize LangChain tool wrapper."""
+        input_schema = _extract_input_schema(tool)
+        output_schema = _extract_output_schema(tool)
         
         super().__init__(
             name=tool.name,
@@ -56,173 +69,129 @@ class LangChainToolLens(ToolLens):
         )
         
         self.tool = tool
-        self.error_fn = error_fn or self._default_error_fn
         self.timeout = timeout
+        self.error_fn = error_fn or self._default_error_fn
     
-    def _extract_input_schema(self, tool: BaseTool) -> Dict:
-        """Extract input schema from LangChain tool"""
-        if hasattr(tool, 'args_schema') and tool.args_schema:
-            # Pydantic model to JSON schema
-            return tool.args_schema.schema()
+    def _default_error_fn(self, result: Any, output_schema: Dict) -> float:
+        """Default prediction error calculation."""
+        if result is None:
+            return 0.9  # High surprise for null
+        elif isinstance(result, str) and len(result) == 0:
+            return 0.7  # Medium surprise for empty
         else:
-            # Fallback to simple schema
-            return {
-                'type': 'object',
-                'properties': {
-                    'input': {'type': 'string'}
-                }
-            }
+            return 0.1  # Low surprise for success
     
-    def _extract_output_schema(self, tool: BaseTool) -> Dict:
-        """Extract expected output schema"""
-        # Most LangChain tools return strings
-        return {
-            'type': 'string',
-            'description': tool.description if hasattr(tool, 'description') else ''
-        }
-    
-    def get(self, state: dict) -> ExecutionResult:
-        """
-        Execute LangChain tool and calculate prediction error.
-        
-        Args:
-            state: Input state matching tool's args_schema
-        
-        Returns:
-            ExecutionResult with prediction_error based on outcome
-        """
+    def get(self, state: Dict[str, Any]) -> ExecutionResult:
+        """Execute LangChain tool with timeout."""
         self.call_count += 1
+        start_time = time.time()
         
         try:
-            # Execute tool with timeout
-            if self.timeout:
-                # Set timeout signal
+            # Platform-specific timeout handling
+            if platform.system() == 'Windows':
+                # Windows doesn't support SIGALRM - use threading
+                result_container = {'result': None, 'error': None}
+                
+                def target():
+                    try:
+                        result_container['result'] = self.tool.run(**state)
+                    except Exception as e:
+                        result_container['error'] = e
+                
+                thread = threading.Thread(target=target)
+                thread.daemon = True
+                thread.start()
+                thread.join(timeout=self.timeout)
+                
+                if thread.is_alive():
+                    # Timeout occurred
+                    self.failure_count += 1
+                    execution_time = time.time() - start_time
+                    return ExecutionResult(
+                        success=False,
+                        value=None,
+                        error=f"Timeout after {self.timeout}s",
+                        prediction_error=0.7
+                    )
+                
+                if result_container['error']:
+                    raise result_container['error']
+                
+                tool_result = result_container['result']
+            
+            else:
+                # Unix-like systems can use signal
+                import signal
+                
                 def timeout_handler(signum, frame):
-                    raise TimeoutError("Tool execution timed out")
+                    raise TimeoutError(f"Timeout after {self.timeout}s")
                 
                 old_handler = signal.signal(signal.SIGALRM, timeout_handler)
                 signal.alarm(int(self.timeout))
+                
+                try:
+                    tool_result = self.tool.run(**state)
+                finally:
+                    signal.alarm(0)
+                    signal.signal(signal.SIGALRM, old_handler)
             
-            # Call LangChain tool
-            result = self.tool.run(state)
-            
-            if self.timeout:
-                signal.alarm(0)  # Cancel timeout
-                signal.signal(signal.SIGALRM, old_handler)
-            
-            # Calculate prediction error
-            error = self.error_fn(result, self.output_schema)
+            # Success
+            execution_time = time.time() - start_time
+            prediction_error = self.error_fn(tool_result, self.output_schema)
             
             return ExecutionResult(
                 success=True,
-                value=result,
+                value=tool_result,
                 error=None,
-                prediction_error=error
+                prediction_error=prediction_error
             )
         
         except TimeoutError as e:
             self.failure_count += 1
-            if self.timeout:
-                signal.alarm(0)
-                signal.signal(signal.SIGALRM, old_handler)
-            
-            return ExecutionResult(
-                success=False,
-                value=None,
-                error=f"Timeout after {self.timeout}s",
-                prediction_error=0.8  # Timeouts are surprising
-            )
-        
-        except Exception as e:
-            self.failure_count += 1
-            if self.timeout:
-                try:
-                    signal.alarm(0)
-                    signal.signal(signal.SIGALRM, old_handler)
-                except:
-                    pass
-            
+            execution_time = time.time() - start_time
             return ExecutionResult(
                 success=False,
                 value=None,
                 error=str(e),
-                prediction_error=0.9  # Exceptions are very surprising
+                prediction_error=0.7
+            )
+        
+        except Exception as e:
+            self.failure_count += 1
+            execution_time = time.time() - start_time
+            return ExecutionResult(
+                success=False,
+                value=None,
+                error=str(e),
+                prediction_error=0.9
             )
     
-    def set(self, state: dict, observation: Any) -> dict:
-        """
-        Update belief state with tool output.
-        
-        Args:
-            state: Current belief state
-            observation: Tool output
-        
-        Returns:
-            Updated belief state
-        """
-        # Store output with tool name as key
+    def set(self, state: Dict[str, Any], obs: Any) -> Dict[str, Any]:
+        """Update state with tool result."""
         return {
             **state,
-            f'{self.name}_output': observation,
-            'last_tool': self.name
+            f'{self.name}_result': obs
         }
-    
-    def _default_error_fn(self, result: Any, expected_schema: Dict) -> float:
-        """
-        Default prediction error calculation.
-        
-        Heuristics:
-        - Empty/None result → 0.6 (moderate surprise)
-        - String result matches expected → 0.1 (low surprise)
-        - Unexpected type → 0.5 (medium surprise)
-        
-        Args:
-            result: Tool output
-            expected_schema: Expected output schema
-        
-        Returns:
-            Prediction error in [0, 1]
-        """
-        if result is None or result == "":
-            return 0.6
-        
-        expected_type = expected_schema.get('type', 'string')
-        
-        if expected_type == 'string' and isinstance(result, str):
-            return 0.1  # As expected
-        elif expected_type == 'number' and isinstance(result, (int, float)):
-            return 0.1
-        elif expected_type == 'boolean' and isinstance(result, bool):
-            return 0.1
-        elif expected_type == 'object' and isinstance(result, dict):
-            return 0.1
-        elif expected_type == 'array' and isinstance(result, list):
-            return 0.1
-        else:
-            return 0.5  # Type mismatch
 
 
 def wrap_langchain_tool(
     tool: BaseTool,
-    **kwargs
+    timeout: float = 30.0,
+    error_fn: Optional[Callable] = None
 ) -> LangChainToolLens:
     """
-    Convenience function to wrap LangChain tools.
+    Convenience function to wrap a LangChain tool.
     
     Args:
-        tool: LangChain BaseTool
-        **kwargs: Passed to LangChainToolLens constructor
+        tool: LangChain BaseTool to wrap
+        timeout: Maximum execution time in seconds
+        error_fn: Optional custom error calculation function
     
     Returns:
-        ToolLens wrapper
+        LangChainToolLens: Wrapped tool ready for LRS use
     
-    Examples:
-        >>> from langchain_community.tools import ShellTool
-        >>> 
-        >>> lens = wrap_langchain_tool(ShellTool(), timeout=5.0)
-        >>> 
-        >>> # Use in LRS agent
-        >>> from lrs import create_lrs_agent
-        >>> agent = create_lrs_agent(llm, tools=[lens])
+    Example:
+        >>> from langchain_community.tools import DuckDuckGoSearchRun
+        >>> search = wrap_langchain_tool(DuckDuckGoSearchRun(), timeout=10.0)
     """
-    return LangChainToolLens(tool, **kwargs)
+    return LangChainToolLens(tool, timeout=timeout, error_fn=error_fn)

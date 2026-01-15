@@ -1,3 +1,31 @@
+"""Free energy calculations for Active Inference."""
+
+from typing import List, Dict, Any, Optional
+from dataclasses import dataclass
+
+from lrs.core.lens import ToolLens  # ADD THIS LINE
+from lrs.core.registry import ToolRegistry
+
+
+@dataclass
+class PolicyEvaluation:
+    """Results of policy evaluation."""
+    
+    epistemic_value: float
+    pragmatic_value: float
+    total_G: float
+    expected_success_prob: float
+    components: Dict[str, Any]
+
+
+def calculate_epistemic_value(
+    policy: List[ToolLens],  # Now ToolLens is defined
+    registry: Optional[ToolRegistry] = None
+) -> float: Calculate epistemic value (information gain) of a policy.
+    
+    # ... rest of implementation
+
+
 import numpy as np
 from typing import List, Dict, Optional
 

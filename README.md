@@ -1,4 +1,4 @@
-$$ LRS-AGENTS $$
+
 
 # LRS-Agents: Resilient AI Agents via Active Inference
 

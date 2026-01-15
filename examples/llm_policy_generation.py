@@ -1,13 +1,4 @@
-"""
-LLM Policy Generation: Detailed walkthrough of the proposal mechanism.
-
-This example shows:
-1. Meta-cognitive prompt construction
-2. Precision-adaptive temperature
-3. LLM response parsing
-4. Proposal validation
-5. G-based evaluation
-"""
+l
 
 from langchain_anthropic import ChatAnthropic
 from lrs.core.registry import ToolRegistry

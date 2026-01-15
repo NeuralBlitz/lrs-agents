@@ -1,23 +1,10 @@
-# docs/requirements.txt
-
-# Sphinx and extensions
-sphinx>=7.2.0,<8.0.0
+# Core Sphinx packages
+sphinx>=7.2.0,<9.0.0
 sphinx-rtd-theme>=2.0.0
-sphinx-autobuild>=2024.0.0
 myst-parser>=2.0.0
-sphinx-copybutton>=0.5.2
-sphinx-tabs>=3.4.5
-sphinxcontrib-napoleon>=0.7
-nbsphinx>=0.9.3
-ipython>=8.12.0
-jupyter>=1.0.0
-sphinx-autodoc-typehints>=1.25.0
-sphinxcontrib-spelling>=8.0.0
-docutils>=0.18.0
-recommonmark>=0.7.1
-requests>=2.31.0
+docutils>=0.18.0,<0.22.0
 
-# Core LRS-Agents dependencies
+# Required LRS dependencies (for autodoc)
 langchain>=0.1.0
 langchain-anthropic>=0.1.0
 langchain-openai>=0.0.5
@@ -26,18 +13,11 @@ langgraph>=0.0.20
 pydantic>=2.5.0
 typing-extensions>=4.9.0
 numpy>=1.24.0
-scipy>=1.11.0  # ADDED
+scipy>=1.11.0
 
-# Testing framework
+# Testing (required by lrs code imports)
 pytest>=7.4.0
-pytest-cov>=4.1.0
 
-# Optional dependencies
+# Optional but recommended
 openai>=1.0.0
-
-# For examples in documentation
-matplotlib>=3.7.0
-plotly>=5.18.0
-
-# For better code highlighting
 pygments>=2.17.0

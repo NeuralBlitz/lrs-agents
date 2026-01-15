@@ -20,6 +20,8 @@ MOCK_MODULES = [
     'plotly.express',
     'seaborn',
     'pandas',
+    'matplotlib',           # ADD
+    'matplotlib.pyplot',    # ADD
 ]
 
 for mod_name in MOCK_MODULES:

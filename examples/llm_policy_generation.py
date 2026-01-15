@@ -1,5 +1,3 @@
-l
-
 from langchain_anthropic import ChatAnthropic
 from lrs.core.registry import ToolRegistry
 from lrs.core.lens import ToolLens, ExecutionResult

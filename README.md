@@ -1,4 +1,4 @@
-$STILL IN BETA TESTING$
+>## *STILL IN BETA TESTING*
 
 # LRS-Agents: Resilient AI Agents via Active Inference
 

@@ -5,7 +5,7 @@ Tests for LangGraph integration.
 import pytest
 from unittest.mock import Mock, MagicMock
 
-from lrs.integration.langgraph import LRSGraphBuilder, create_lrs_agent, LRSState
+from lrs.integration.langgraph import LRSGraphBuilder, LRSState
 from lrs.core.registry import ToolRegistry
 from lrs.core.lens import ToolLens, ExecutionResult
 from lrs.core.precision import HierarchicalPrecision

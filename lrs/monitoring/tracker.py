@@ -1,12 +1,10 @@
-"""
-State tracking for LRS agents.
+"""State tracking for LRS agents.
 
-Maintains a rolling history of agent states for analysis and visualization.
-"""
+Maintains a rolling history of agent states for analysis and visualization."""
 
 from typing import List, Dict, Any, Optional
 from collections import deque
-from dataclimport dataclass
+from dataclasses import dataclass
 from datetime import datetime
 import json
 

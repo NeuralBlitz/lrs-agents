@@ -1,7 +1,5 @@
 $$ LRS-AGENTS $$
-# Complete Comprehensive README.md
 
-```markdown
 # LRS-Agents: Resilient AI Agents via Active Inference
 
 [![CI](https://github.com/NeuralBlitz/lrs-agents/workflows/CI/badge.svg)](https://github.com/NeuralBlitz/lrs-agents/actions)

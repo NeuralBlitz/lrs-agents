@@ -187,12 +187,17 @@ def create_mock_generator(num_proposals: int = 3) -> LLMPolicyGenerator:
             "strategy": "balanced",
             "failure_modes": ["It might fail if the input is wrong."]
         })
+
     
     response_data = {
         "proposals": proposals_data,
         "current_uncertainty": 0.3,
         "known_unknowns": ["The exact format of the API response."]
     }
+
+    # The response content must be a JSON string
+    json_response = json.dumps(response_data)
+
     
     # The response content must be a JSON string
     json_response = json.dumps(response_data)
@@ -202,6 +207,21 @@ def create_mock_generator(num_proposals: int = 3) -> LLMPolicyGenerator:
     mock_response = MagicMock()
     mock_response.content = json_response
     mock_llm.invoke.return_value = mock_response
+    
+    # 3. Configure the mock ToolRegistry.
+    mock_registry = MagicMock()
+
+    # The generate_proposals method needs `registry.get_tool` to be callable
+    # and to return a tool object for the names in our mock response.
+    # It also needs `registry.tools` to be iterable for prompt generation.
+
+    # Create mock tools. Using MagicMock is fine for this purpose.
+    mock_tools = {}
+    for name in tool_names:
+        tool = MagicMock()
+        tool.name = name
+        mock_tools[name] = tool
+
     
     # 3. Configure the mock ToolRegistry.
     mock_registry = MagicMock()

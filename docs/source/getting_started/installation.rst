@@ -266,6 +266,7 @@ Getting Help
 If you encounter issues:
 
 * Check the `GitHub Issues <https://github.com/NeuralBlitz/lrs-agents/issues>`_
+* Join our `Hugging Face community <https://huggingface.co/NuralNexus>`_
 * Join our `Discord community <https://huggingface.co/NuralNexus>`_
 * Email nuralnexus@icloud.com
 

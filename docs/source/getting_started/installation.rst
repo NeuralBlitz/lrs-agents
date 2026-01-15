@@ -92,7 +92,7 @@ For the latest development version:
 
 .. code-block:: bash
 
-   git clone https://github.com/YourOrg/lrs-agents.git
+   git clone https://github.com/NeuralBlitz/lrs-agents.git
    cd lrs-agents
    pip install -e .
 
@@ -103,7 +103,7 @@ To contribute to LRS-Agents:
 
 .. code-block:: bash
 
-   git clone https://github.com/YourOrg/lrs-agents.git
+   git clone https://github.com/NeuralBlitz/lrs-agents.git
    cd lrs-agents
    pip install -e ".[dev,test]"
 
@@ -265,9 +265,9 @@ Getting Help
 
 If you encounter issues:
 
-* Check the `GitHub Issues <https://github.com/YourOrg/lrs-agents/issues>`_
-* Join our `Discord community <https://discord.gg/lrs-agents>`_
-* Email support@lrs-agents.dev
+* Check the `GitHub Issues <https://github.com/NeuralBlitz/lrs-agents/issues>`_
+* Join our `Hugging Face community <https://huggingface.co/NuralNexus>`_
+* Email nuralnexus@icloud.com
 
 Next Steps
 ----------

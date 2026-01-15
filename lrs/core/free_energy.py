@@ -2,8 +2,9 @@
 
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+import math
 
-from lrs.core.lens import ToolLens  # ADD THIS LINE
+from lrs.core.lens import ToolLens
 from lrs.core.registry import ToolRegistry
 
 
@@ -17,6 +18,8 @@ class PolicyEvaluation:
     expected_success_prob: float
     components: Dict[str, Any]
 
+
+# ... rest of file
 
 def calculate_epistemic_value(
     policy: List[ToolLens],  # Now ToolLens is defined

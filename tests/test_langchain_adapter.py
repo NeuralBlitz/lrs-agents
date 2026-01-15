@@ -10,9 +10,6 @@ import LangChainToolLens,
 import pytest
 from unittest.mock import Mock, MagicMock
 from typing import Dict, Any
-
-from lrs.integration.langchain_adapter import 
-    LangChainToolLens, wrap_langchain_tool,
 from lrs.core.lens import ExecutionResult
 
 

@@ -13,7 +13,7 @@ setup(
     description="Resilient AI agents via Active Inference and Predictive Processing",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/YourOrg/lrs-agents",
+    url="https://github.com/NeuralBlitz/lrs-agents",
     packages=find_packages(exclude=["tests", "tests.*", "docs", "examples"]),
     package_data={
         "lrs": ["py.typed"],

@@ -109,6 +109,8 @@ suppress_warnings = ['ref.python', 'ref.doc', 'ref.ref']
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3', None),
     'numpy': ('https://numpy.org/doc/stable/', None),
+    'langchain': ('https://python.langchain.com/v0.2/api_reference/', None)
+
 }
 
 # MyST settings

@@ -766,7 +766,7 @@ If you use LRS-Agents in your research, please cite:
   title = {LRS-Agents: Resilient AI Agents via Active Inference},
   author = {LRS-Agents Contributors},
   year = {2025},
-  url = {https://github.com/YourOrg/lrs-agents},
+  url = {https://github.com/NeuralBlitz/lrs-agents},
   version = {0.2.0}
 }
 ```

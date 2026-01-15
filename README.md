@@ -783,7 +783,7 @@ If you use LRS-Agents in your research, please cite:
 
 **Built with ❤️ by the LRS-Agents team**
 
-[Documentation](https://lrs-agents.readthedocs.io) •
+[Documentation](https://github.com/Neurablitz/lrs-agent) •
 [Examples](examples/) •
 [Contributing](CONTRIBUTING.md) •
 [License](LICENSE)

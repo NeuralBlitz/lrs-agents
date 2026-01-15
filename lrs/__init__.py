@@ -2,7 +2,8 @@
 
 __version__ = "0.2.0"
 
-
+# Export main entry point
+from lrs.integration.langgraph import create_lrs_agent
 
 __all__ = [
     "__version__",

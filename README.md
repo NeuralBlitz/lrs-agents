@@ -654,7 +654,7 @@ We welcome contributions! See <CONTRIBUTING.md> for guidelines.
 
 ```bash
 # Clone repository
-git clone https://github.com/YourOrg/lrs-agents.git
+git clone https://github.com/NeuralBitz/lrs-agents.git
 cd lrs-agents
 
 # Install in development mode
@@ -732,10 +732,10 @@ MIT License - see <LICENSE> file for details.
 ## 💬 Community & Support
 
 - **Documentation**: [lrs-agents.readthedocs.io](https://lrs-agents.readthedocs.io)
-- **GitHub Issues**: [Report bugs](https://github.com/YourOrg/lrs-agents/issues)
-- **Discussions**: [Ask questions](https://github.com/YourOrg/lrs-agents/discussions)
+- **GitHub Issues**: [Report bugs](https://github.com/NeuralBlitz/lrs-agents/issues)
+- **Discussions**: [Ask questions](https://github.com/NeuralBlitz/lrs-agents/discussions)
 - **Twitter**: [@LRSAgents](https://twitter.com/LRSAgents)
-- **Discord**: [Join community](https://discord.gg/lrs-agents)
+- **Hugging Face**: [Join community](https://huggingface.co/NuralNexus)
 
 -----
 
@@ -775,7 +775,7 @@ If you use LRS-Agents in your research, please cite:
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=YourOrg/lrs-agents&type=Date)](https://star-history.com/#YourOrg/lrs-agents&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=NeuralBlitz/lrs-agents&type=Date)](https://star-history.com/#NeuralBlitz/lrs-agents&Date)
 
 -----
 

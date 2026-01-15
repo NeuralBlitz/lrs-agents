@@ -29,3 +29,6 @@ jobs:
     - name: Run tests
       run: |
         pytest tests/ -v
+
+    - name: Install package and dependencies
+      run: pip install ".[all]"

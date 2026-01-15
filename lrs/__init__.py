@@ -1,11 +1,13 @@
 """LRS-Agents: Resilient AI agents via Active Inference."""
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
-# Export main entry point
-from lrs.integration.langgraph import create_lrs_agent
+__all__ = ["__version__"]
 
-__all__ = [
-    "__version__",
-    "create_lrs_agent",
-]
+
+def __getattr__(name):
+    """Lazy import for optional dependencies."""
+    if name == "create_lrs_agent":
+        from lrs.integration.langgraph import create_lrs_agent
+        return create_lrs_agent
+    raise AttributeError(f"module 'lrs' has no attribute '{name}'")

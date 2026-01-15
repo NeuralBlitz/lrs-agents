@@ -1,6 +1,6 @@
 """Integration modules for LRS-Agents."""
 
-from lrs.integration.langgraph import create_lrs_agen
+from lrs.integration.langgraph import create_lrs_agent
 from lrs.integration.langchain_adapter import wrap_langchain_tool
 
 __all__ = [

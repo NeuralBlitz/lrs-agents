@@ -8,7 +8,7 @@ on:
       target:
         description: 'Publish target'
         required: true
-        default: 'pypi '
+        default: 'pypi'
         type: choice
         options:
           - testpypi

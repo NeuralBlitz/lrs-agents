@@ -11,10 +11,7 @@ from lrs.multi_agent.communication import (
     CommunicationLens,
 )
 from lrs.multi_agent.coordinator import MultiAgentCoordinator
-from lrs.multi_agent.multi_agent_free_energy import (
-    calculate_total_free_energy,
-    should_communicate,
-)
+from lrs.multi_agent.multi_agent_free_energy import calculate_total_free_energy
 
 __all__ = [
     "SharedWorldState",
@@ -25,5 +22,4 @@ __all__ = [
     "CommunicationLens",
     "MultiAgentCoordinator",
     "calculate_total_free_energy",
-    "should_communicate",
 ]

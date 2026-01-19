@@ -1,28 +1,17 @@
-"""
-Benchmark suite for LRS-Agents.
-
-This module provides:
-- Chaos Scriptorium: Volatile environment benchmark
-- GAIA: General AI Assistants benchmark
-- Performance comparison utilities
-"""
+"""Benchmark suites for LRS-Agents."""
 
 from lrs.benchmarks.chaos_scriptorium import (
-    ChaosEnvironment,
     ChaosScriptoriumBenchmark,
-    run_chaos_benchmark
+    run_benchmark,
 )
 from lrs.benchmarks.gaia_benchmark import (
-    GAIATask,
-    GAIAToolkit,
-    GAIABenchmark
+    GAIABenchmark,
+    run_gaia_benchmark,
 )
 
 __all__ = [
-    "ChaosEnvironment",
     "ChaosScriptoriumBenchmark",
-    "run_chaos_benchmark",
-    "GAIATask",
-    "GAIAToolkit",
+    "run_benchmark",
     "GAIABenchmark",
+    "run_gaia_benchmark",
 ]

@@ -4,7 +4,7 @@ sphinx-rtd-theme>=2.0.0
 myst-parser>=2.0.0
 docutils>=0.18.0,<0.22.0
 
-# Required LRS dependencies (for autodoc)
+# Required LRS dependencies
 langchain>=0.1.0
 langchain-anthropic>=0.1.0
 langchain-openai>=0.0.5
@@ -18,6 +18,6 @@ scipy>=1.11.0
 # Testing (required by lrs code imports)
 pytest>=7.4.0
 
-# Optional but recommended
+# Optional
 openai>=1.0.0
 pygments>=2.17.0

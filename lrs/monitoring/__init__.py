@@ -19,6 +19,5 @@ __all__ = [
     "create_logger_for_agent",
 ]
 
-# Only export dashboard if available
 if _has_dashboard:
     __all__.extend(["create_dashboard", "run_dashboard"])

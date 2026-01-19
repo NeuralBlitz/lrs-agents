@@ -2,7 +2,15 @@
 
 import pytest
 from unittest.mock import Mock
-from typing import Dict, Any, List
+from typing import Dict, Any
+import sys
+
+# Mock streamlit if not installed
+if 'streamlit' not in sys.modules:
+    sys.modules['streamlit'] = Mock()
+if 'plotly' not in sys.modules:
+    sys.modules['plotly'] = Mock()
+    sys.modules['plotly.graph_objects'] = Mock()
 
 
 @pytest.fixture

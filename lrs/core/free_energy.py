@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import math
 
-from lrs.core.lens import ToolLens
+from lrs.core.lens import ToolLens  # CRITICAL: Import ToolLens
 from lrs.core.registry import ToolRegistry
 
 
@@ -19,96 +19,197 @@ class PolicyEvaluation:
     components: Dict[str, Any]
 
 
-# ... rest of file
-
-def calculate_epistemic_value(
-    policy: List[ToolLens],  # Now ToolLens is defined
-    registry: Optional[ToolRegistry] = None
-) -> float: Calculate epistemic value (information gain) of a policy.
-    
-    # ... rest of implementation
-
-
-import numpy as np
-from typing import List, Dict, Optional
-
-# Constants for numerical stability
-EPSILON = 1e-12
-
 def calculate_epistemic_value(
     policy: List[ToolLens],
-    state: Optional[Dict] = None
+    registry: Optional[ToolRegistry] = None
 ) -> float:
-    total_epistemic = 0.0
+    """
+    Calculate epistemic value (information gain) of a policy.
     
+    Higher values indicate more information gain from exploration.
+    
+    Args:
+        policy: Sequence of tools to execute
+        registry: Tool registry with statistics
+    
+    Returns:
+        Epistemic value (information gain)
+    
+    Example:
+        >>> epistemic = calculate_epistemic_value([novel_tool])
+        >>> # High value for unexplored tools
+    """
+    if not policy:
+        return 0.0
+    
+    epistemic = 0.0
     for tool in policy:
-        if tool.call_count == 0:
-            total_epistemic += 1.0
-            continue
+        # Information gain ≈ entropy of success distribution
+        # H(p) = -p*log(p) - (1-p)*log(1-p)
+        p = tool.success_rate if hasattr(tool, 'success_rate') else 0.5
         
-        # Use Laplace Smoothing (Add-one smoothing) for robust probabilities
-        # This prevents p being exactly 0 or 1
-        p_success = (tool.call_count - tool.failure_count + 1) / (tool.call_count + 2)
-        p_failure = 1.0 - p_success
+        # Clamp to avoid log(0)
+        p = max(0.01, min(0.99, p))
         
-        # Shannon entropy with stability epsilon
-        entropy = -(p_success * np.log(p_success + EPSILON) + 
-                   p_failure * np.log(p_failure + EPSILON))
-        
-        total_epistemic += entropy
+        entropy = -(p * math.log(p) + (1 - p) * math.log(1 - p))
+        epistemic += entropy
     
-    return total_epistemic
+    return epistemic
+
 
 def calculate_pragmatic_value(
     policy: List[ToolLens],
-    state: Dict,
     preferences: Dict[str, float],
-    discount_factor: float = 0.95
+    registry: Optional[ToolRegistry] = None,
+    discount: float = 0.95
 ) -> float:
-    total_pragmatic = 0.0
+    """
+    Calculate pragmatic value (expected reward) of a policy.
     
-    for t, tool in enumerate(policy):
-        # Laplace-smoothed success probability
-        p_success = (tool.call_count - tool.failure_count + 1) / (tool.call_count + 2)
-        step_reward = 0.0
+    Higher values indicate higher expected utility.
+    
+    Args:
+        policy: Sequence of tools to execute
+        preferences: Reward/cost for outcomes (success, error, step_cost)
+        registry: Tool registry with statistics
+        discount: Temporal discount factor (default: 0.95)
+    
+    Returns:
+        Pragmatic value (expected reward)
+    
+    Example:
+        >>> pragmatic = calculate_pragmatic_value(
+        ...     [reliable_tool],
+        ...     preferences={'success': 5.0, 'error': -3.0}
+        ... )
+        >>> # High value for reliable tools
+    """
+    if not policy:
+        return 0.0
+    
+    reward_success = preferences.get('success', 1.0)
+    reward_error = preferences.get('error', -1.0)
+    step_cost = preferences.get('step_cost', -0.1)
+    
+    pragmatic = 0.0
+    discount_factor = 1.0
+    
+    for tool in policy:
+        p_success = tool.success_rate if hasattr(tool, 'success_rate') else 0.5
         
-        # Fix: Better schema checking
-        required_features = tool.output_schema.get('required', [])
+        # Expected reward for this step
+        expected_reward = (
+            p_success * reward_success +
+            (1 - p_success) * reward_error +
+            step_cost
+        )
         
-        for feature, weight in preferences.items():
-            if feature in required_features:
-                step_reward += weight * p_success
-            elif feature == 'error':
-                step_reward += weight * (1.0 - p_success)
-        
-        total_pragmatic += (discount_factor ** t) * step_reward
-        
-    return total_pragmatic
+        pragmatic += discount_factor * expected_reward
+        discount_factor *= discount
+    
+    return pragmatic
+
+
+def calculate_expected_free_energy(
+    policy: List[ToolLens],
+    registry: Optional[ToolRegistry] = None,
+    preferences: Optional[Dict[str, float]] = None,
+    precision: float = 0.5,
+    epistemic_weight: Optional[float] = None
+) -> float:
+    """
+    Calculate Expected Free Energy G(π) for a policy.
+    
+    G(π) = Epistemic Value - Pragmatic Value
+    
+    Lower G is better (minimization objective).
+    
+    Args:
+        policy: Sequence of tools to execute
+        registry: Tool registry with statistics
+        preferences: Reward structure
+        precision: Current precision γ ∈ [0,1]
+        epistemic_weight: Override for epistemic term weight
+    
+    Returns:
+        Expected Free Energy G
+    
+    Example:
+        >>> G = calculate_expected_free_energy(
+        ...     policy=[search_tool, filter_tool],
+        ...     preferences={'success': 5.0, 'error': -3.0},
+        ...     precision=0.7
+        ... )
+        >>> # Low G indicates good policy
+    """
+    if not policy:
+        return 0.0
+    
+    if preferences is None:
+        preferences = {'success': 1.0, 'error': -1.0, 'step_cost': -0.1}
+    
+    # Calculate components
+    epistemic = calculate_epistemic_value(policy, registry)
+    pragmatic = calculate_pragmatic_value(policy, preferences, registry)
+    
+    # Weight epistemic term by uncertainty (1 - precision)
+    if epistemic_weight is None:
+        epistemic_weight = 1.0 - precision
+    
+    # G = Epistemic - Pragmatic
+    G = epistemic_weight * epistemic - pragmatic
+    
+    return G
+
 
 def precision_weighted_selection(
-    evaluations: List[PolicyEvaluation],
-    precision: float,
+    policy_evaluations: List[PolicyEvaluation],
+    precision: float = 0.5,
     temperature: float = 1.0
 ) -> int:
-    if not evaluations:
+    """
+    Select policy using precision-weighted softmax.
+    
+    P(π) ∝ exp(-β * G(π))
+    
+    where β = precision (inverse temperature).
+    
+    Args:
+        policy_evaluations: Evaluated policies
+        precision: Current precision γ ∈ [0,1]
+        temperature: Additional temperature parameter
+    
+    Returns:
+        Index of selected policy
+    
+    Example:
+        >>> selected_idx = precision_weighted_selection(
+        ...     evaluations,
+        ...     precision=0.7
+        ... )
+        >>> best_policy = policies[selected_idx]
+    """
+    import random
+    
+    if not policy_evaluations:
         raise ValueError("Cannot select from empty evaluations")
     
-    # Extract G values and ensure they are finite
-    G_values = np.array([e.total_G for e in evaluations])
-    G_values = np.nan_to_num(G_values, nan=100.0, posinf=100.0, neginf=-100.0)
+    # Extract G values
+    G_values = [eval.total_G for eval in policy_evaluations]
     
-    # Scale G by precision and temperature
-    # We negate G because we want to MINIMIZE G (min G = max probability)
-    logits = - (precision * G_values) / (temperature + EPSILON)
+    # Softmax with precision as inverse temperature
+    beta = precision / temperature
+    exp_values = [math.exp(-beta * G) for G in G_values]
+    total = sum(exp_values)
     
-    # Numerical stability: subtract max logit
-    logits -= np.max(logits)
-    exp_vals = np.exp(logits)
+    probabilities = [e / total for e in exp_values]
     
-    probs = exp_vals / np.sum(exp_vals)
+    # Sample from distribution
+    r = random.random()
+    cumsum = 0.0
+    for i, p in enumerate(probabilities):
+        cumsum += p
+        if r < cumsum:
+            return i
     
-    # Final guardrail: if probs are NaN (can happen with all -inf logits)
-    if np.any(np.isnan(probs)):
-        probs = np.ones(len(evaluations)) / len(evaluations)
-        
-    return np.random.choice(len(evaluations), p=probs)
+    return len(probabilities) - 1  # Fallback

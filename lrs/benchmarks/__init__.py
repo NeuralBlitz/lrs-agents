@@ -1,17 +1,9 @@
 """Benchmark suites for LRS-Agents."""
 
-from lrs.benchmarks.chaos_scriptorium import (
-    ChaosScriptoriumBenchmark,
-    run_benchmark,
-)
-from lrs.benchmarks.gaia_benchmark import (
-    GAIABenchmark,
-    run_gaia_benchmark,
-)
+from lrs.benchmarks.chaos_scriptorium import ChaosScriptoriumBenchmark
+from lrs.benchmarks.gaia_benchmark import GAIABenchmark
 
 __all__ = [
     "ChaosScriptoriumBenchmark",
-    "run_benchmark",
     "GAIABenchmark",
-    "run_gaia_benchmark",
 ]

@@ -3,4 +3,11 @@
 from setuptools import setup
 
 # Configuration is in pyproject.toml
-setup()
+setup(
+    entry_points={
+        'console_scripts': [
+            'lrs=lrs.cli:main',
+            'lrs-agents=lrs.cli:main',
+        ],
+    },
+)

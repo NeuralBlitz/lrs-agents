@@ -112,3 +112,7 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
 ignore_missing_imports = true
+
+[project.scripts]
+lrs = "lrs.cli:main"
+lrs-agents = "lrs.cli:main"

@@ -12,6 +12,13 @@ from lrs.multi_agent.social_precision import SocialPrecisionTracker
 class MessageType(Enum):
     """Types of messages agents can send."""
     
+    # Core message types (used by tests)
+    QUERY = "query"
+    INFORM = "inform"
+    REQUEST = "request"
+    RESPONSE = "response"
+    
+    # Extended types
     INFORMATION_REQUEST = "information_request"
     INFORMATION_SHARE = "information_share"
     COORDINATION_REQUEST = "coordination_request"

@@ -3,11 +3,11 @@
 def test_import_lrs():
     """Test that lrs package can be imported."""
     import lrs
-    assert lrs.__version__ == "0.2.0"
+    assert lrs.__version__ == "0.2.1"
 
 
 def test_import_core():
-    """Test that core modules can be imported."""
+    """Test that core modules can be imported without dependencies."""
     from lrs.core import precision
     from lrs.core import lens
     from lrs.core import registry
@@ -19,7 +19,11 @@ def test_import_core():
     assert free_energy is not None
 
 
-def test_create_lrs_agent():
-    """Test that create_lrs_agent is available."""
-    from lrs import create_lrs_agent
-    assert create_lrs_agent is not None
+def test_create_lrs_agent_lazy():
+    """Test that create_lrs_agent is lazily imported."""
+    try:
+        from lrs import create_lrs_agent
+        assert create_lrs_agent is not None
+    except ImportError as e:
+        # If langgraph not installed, should get helpful message
+        assert "langgraph" in str(e).lower()

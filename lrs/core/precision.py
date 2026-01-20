@@ -1,98 +1,111 @@
 """Precision tracking for Active Inference agents."""
 
 from dataclasses import dataclass, field
-from typing import Dict, Optional, List
-import math
-
-
-def beta_mean(alpha: float, beta: float) -> float:
-    """Calculate mean of Beta distribution."""
-    return alpha / (alpha + beta)
-
-
-def beta_variance(alpha: float, beta: float) -> float:
-    """Calculate variance of Beta distribution."""
-    ab_sum = alpha + beta
-    return (alpha * beta) / (ab_sum * ab_sum * (ab_sum + 1))
+from typing import Dict, Optional
+import numpy as np
 
 
 @dataclass
 class PrecisionParameters:
     """
-    Represents precision as a Beta distribution.
+    Precision parameters using Beta distribution.
     
-    Precision γ ∈ [0, 1] represents confidence in predictions.
-    Tracked via Beta(α, β) distribution with asymmetric learning rates.
+    Precision γ = α/(α+β) represents confidence in predictions.
     
     Args:
-        alpha: Alpha parameter of Beta distribution (successes + 1)
-        beta: Beta parameter of Beta distribution (failures + 1)
-        gain_learning_rate: Rate at which precision increases (default: 0.1)
-        loss_learning_rate: Rate at which precision decreases (default: 0.2)
-        min_precision: Minimum allowed precision value (default: 0.01)
-        max_precision: Maximum allowed precision value (default: 0.99)
-        adaptation_threshold: Precision below which adaptation triggers (default: 0.4)
+        alpha: Success parameter (default: 1.0)
+        beta: Failure parameter (default: 1.0)
+        gain_learning_rate: Learning rate for successes (default: 0.1)
+        loss_learning_rate: Learning rate for failures (default: 0.2)
+        adaptation_threshold: Threshold below which adaptation triggers (default: 0.4)
     
     Example:
         >>> precision = PrecisionParameters()
-        >>> precision.value  # Initial: 0.5
-        0.5
-        >>> precision.update(0.1)  # Success
-        >>> precision.value  # Slight increase
-        0.518
-        >>> precision.update(0.9)  # Failure
-        >>> precision.value  # Larger decrease
-        0.424
+        >>> precision.value  # 0.5 (maximum uncertainty)
+        >>> precision.update(prediction_error=0.1)  # Success
+        >>> precision.value  # ~0.52 (slight increase)
     """
     
     alpha: float = 1.0
     beta: float = 1.0
     gain_learning_rate: float = 0.1
     loss_learning_rate: float = 0.2
-    min_precision: float = 0.01
-    max_precision: float = 0.99
     adaptation_threshold: float = 0.4
-    
-    # Support alternative parameter names for backward compatibility
-    def __post_init__(self):
-        """Handle alternative parameter names."""
-        pass
     
     @property
     def value(self) -> float:
         """
-        Expected value (mean) of precision.
+        Get current precision value γ = α/(α+β).
         
         Returns:
-            float: Precision value γ = α / (α + β), clamped to [min_precision, max_precision]
+            Precision in [0,1]
         """
-        precision = beta_mean(self.alpha, self.beta)
-        return max(self.min_precision, min(self.max_precision, precision))
+        return self.alpha / (self.alpha + self.beta)
     
     @property
     def variance(self) -> float:
         """
-        Variance of precision distribution.
+        Get variance of Beta distribution.
         
         Returns:
-            float: Variance of Beta(α, β)
+            Variance of precision estimate
         """
-        return beta_variance(self.alpha, self.beta)
+        a = self.alpha
+        b = self.beta
+        return (a * b) / ((a + b) ** 2 * (a + b + 1))
     
-    @property
-    def mode(self) -> float:
+    def update(self, prediction_error: float) -> None:
         """
-        Most likely value of precision (mode of Beta distribution).
+        Update precision based on prediction error.
+        
+        Uses asymmetric learning rates:
+        - Low error (success) → small increase in α
+        - High error (failure) → larger increase in β
+        
+        Args:
+            prediction_error: Prediction error δ ∈ [0,1]
+        
+        Example:
+            >>> precision = PrecisionParameters()
+            >>> precision.update(0.1)  # Success
+            >>> precision.update(0.9)  # Failure
+        """
+        # Inverse error = success signal
+        inverse_error = 1.0 - prediction_error
+        
+        # Asymmetric updates
+        self.alpha += self.gain_learning_rate * inverse_error
+        self.beta += self.loss_learning_rate * prediction_error
+    
+    def should_adapt(self) -> bool:
+        """
+        Check if precision is below adaptation threshold.
         
         Returns:
-            float: Mode if α, β > 1, otherwise returns mean
+            True if adaptation should be triggered
         """
-        if self.alpha > 1 and self.beta > 1:
-            mode = (self.alpha - 1) / (self.alpha + self.beta - 2)
-            return max(self.min_precision, min(self.max_precision, mode))
-        return self.value
+        return self.value < self.adaptation_threshold
     
-    # Aliases for backward compatibility
+    def reset(self) -> None:
+        """Reset to initial uniform prior."""
+        self.alpha = 1.0
+        self.beta = 1.0
+    
+    def get_all(self) -> Dict[str, float]:
+        """
+        Get all precision statistics.
+        
+        Returns:
+            Dictionary with value, alpha, beta, variance
+        """
+        return {
+            'value': self.value,
+            'alpha': self.alpha,
+            'beta': self.beta,
+            'variance': self.variance
+        }
+    
+    # Backward compatibility properties
     @property
     def learning_rate_gain(self) -> float:
         """Alias for gain_learning_rate."""
@@ -108,281 +121,161 @@ class PrecisionParameters:
         """Alias for adaptation_threshold."""
         return self.adaptation_threshold
     
-    def update(self, prediction_error: float) -> float:
-        """
-        Update precision based on prediction error.
-        
-        Uses asymmetric learning rates:
-        - Slow increase on success (gain_learning_rate)
-        - Fast decrease on failure (loss_learning_rate)
-        
-        Args:
-            prediction_error: Prediction error δ ∈ [0, 1]
-                            0 = perfect prediction
-                            1 = maximum surprise
-        
-        Returns:
-            float: New precision value
-        
-        Example:
-            >>> precision = PrecisionParameters()
-            >>> precision.update(0.1)  # Low error (success)
-            0.518
-            >>> precision.update(0.9)  # High error (failure)  
-            0.424
-        """
-        # Clamp prediction error to [0, 1]
-        prediction_error = max(0.0, min(1.0, prediction_error))
-        
-        # Asymmetric update
-        success = 1.0 - prediction_error
-        self.alpha += self.gain_learning_rate * success
-        self.beta += self.loss_learning_rate * prediction_error
-        
-        return self.value
-    
-    def reset(self) -> None:
-        """Reset precision to initial uniform prior."""
-        self.alpha = 1.0
-        self.beta = 1.0
-    
-    def should_adapt(self) -> bool:
-        """
-        Check if adaptation should be triggered.
-        
-        Returns:
-            bool: True if precision is below adaptation threshold
-        """
-        return self.value < self.adaptation_threshold
-    
-    def __repr__(self) -> str:
-        """String representation of precision parameters."""
-        return (
-            f"PrecisionParameters(value={self.value:.3f}, "
-            f"alpha={self.alpha:.2f}, beta={self.beta:.2f}, "
-            f"variance={self.variance:.4f})"
-        )
+    def get_all_values(self) -> Dict[str, float]:
+        """Alias for get_all()."""
+        return self.get_all()
 
 
-@dataclass  
+@dataclass
 class HierarchicalPrecision:
     """
-    Hierarchical precision tracking across multiple levels.
+    Hierarchical precision tracking across abstraction levels.
     
-    Tracks precision at three levels:
+    Precision is maintained at three levels:
     - Abstract: Long-term goals and strategies
-    - Planning: Action sequences and policies
-    - Execution: Individual tool executions
+    - Planning: Policy sequences
+    - Execution: Individual tool calls
     
-    Prediction errors propagate upward through hierarchy with
-    threshold-based attenuation.
-    
-    Args:
-        propagation_threshold: Error must exceed this to propagate up (default: 0.7)
-        attenuation_factor: Multiply error by this when propagating (default: 0.5)
-        gain_learning_rate: Learning rate for precision increases (default: 0.1)
-        loss_learning_rate: Learning rate for precision decreases (default: 0.2)
+    Errors propagate upward with attenuation.
     
     Example:
         >>> hp = HierarchicalPrecision()
-        >>> hp.update('execution', 0.95)  # High error at execution
-        >>> hp.get_level('execution').value  # Execution precision drops
-        0.424
-        >>> hp.get_level('planning').value  # Planning also affected (attenuated)
-        0.442
+        >>> hp.update('execution', 0.9)  # High error
+        >>> hp.execution  # Decreased
+        >>> hp.planning   # Also decreased (propagation)
     """
+    
+    _abstract: PrecisionParameters = field(default_factory=PrecisionParameters)
+    _planning: PrecisionParameters = field(default_factory=PrecisionParameters)
+    _execution: PrecisionParameters = field(default_factory=PrecisionParameters)
     
     propagation_threshold: float = 0.7
     attenuation_factor: float = 0.5
-    gain_learning_rate: float = 0.1
-    loss_learning_rate: float = 0.2
-    levels: Dict[str, PrecisionParameters] = field(default_factory=dict, init=False)
     
-    def __post_init__(self):
-        """Initialize precision parameters for each level."""
-        self.levels = {
-            'abstract': PrecisionParameters(
-                gain_learning_rate=self.gain_learning_rate,
-                loss_learning_rate=self.loss_learning_rate
-            ),
-            'planning': PrecisionParameters(
-                gain_learning_rate=self.gain_learning_rate,
-                loss_learning_rate=self.loss_learning_rate
-            ),
-            'execution': PrecisionParameters(
-                gain_learning_rate=self.gain_learning_rate,
-                loss_learning_rate=self.loss_learning_rate
-            ),
-        }
-    
-    def get_level(self, level: str) -> PrecisionParameters:
-        """
-        Get precision parameters for a specific level.
-        
-        Args:
-            level: One of 'abstract', 'planning', 'execution'
-        
-        Returns:
-            PrecisionParameters: Precision for that level
-        
-        Raises:
-            ValueError: If level is not one of the valid levels
-        """
-        if level not in self.levels:
-            raise ValueError(
-                f"Invalid level: {level}. "
-                f"Must be one of {list(self.levels.keys())}"
-            )
-        return self.levels[level]
-    
-    # Convenience properties for direct access
+    # Properties that return float values (for convenience)
     @property
     def abstract(self) -> float:
         """Get abstract level precision value."""
-        return self.levels['abstract'].value
+        return self._abstract.value
     
     @property
     def planning(self) -> float:
         """Get planning level precision value."""
-        return self.levels['planning'].value
+        return self._planning.value
     
     @property
     def execution(self) -> float:
         """Get execution level precision value."""
-        return self.levels['execution'].value
+        return self._execution.value
     
-    def update(self, level: str, prediction_error: float) -> Dict[str, float]:
+    def get_level(self, level: str) -> PrecisionParameters:
         """
-        Update precision at a level and propagate upward if needed.
+        Get PrecisionParameters object for a specific level.
         
         Args:
-            level: Level to update ('abstract', 'planning', 'execution')
-            prediction_error: Prediction error δ ∈ [0, 1]
+            level: One of 'abstract', 'planning', or 'execution'
         
         Returns:
-            dict: New precision values for all updated levels
+            PrecisionParameters object for that level
         
         Example:
             >>> hp = HierarchicalPrecision()
-            >>> result = hp.update('execution', 0.95)
-            >>> 'execution' in result
-            True
-            >>> 'planning' in result  # Propagated upward
-            True
+            >>> exec_params = hp.get_level('execution')
+            >>> exec_params.value  # 0.5
         """
-        updated = {}
+        if level == 'abstract':
+            return self._abstract
+        elif level == 'planning':
+            return self._planning
+        elif level == 'execution':
+            return self._execution
+        else:
+            raise ValueError(f"Invalid level: {level}. Must be 'abstract', 'planning', or 'execution'")
+    
+    def update(self, level: str, prediction_error: float) -> None:
+        """
+        Update precision at a specific level with upward propagation.
         
-        # Update current level
-        new_precision = self.levels[level].update(prediction_error)
-        updated[level] = new_precision
+        High prediction errors (>0.7) propagate upward with attenuation.
         
-        # Propagate upward if error exceeds threshold
-        if prediction_error >= self.propagation_threshold:
+        Args:
+            level: Level to update ('abstract', 'planning', 'execution')
+            prediction_error: Prediction error δ ∈ [0,1]
+        
+        Example:
+            >>> hp = HierarchicalPrecision()
+            >>> hp.update('execution', 0.95)  # High error
+            >>> # Execution precision drops AND planning is affected
+        """
+        # Update the specified level
+        params = self.get_level(level)
+        params.update(prediction_error)
+        
+        # Propagate upward if error is high
+        if prediction_error > self.propagation_threshold:
             attenuated_error = prediction_error * self.attenuation_factor
             
-            # Execution → Planning
             if level == 'execution':
-                new_planning = self.levels['planning'].update(attenuated_error)
-                updated['planning'] = new_planning
-                
-                # Planning → Abstract (if planning error also high)
-                if attenuated_error >= self.propagation_threshold:
-                    further_attenuated = attenuated_error * self.attenuation_factor
-                    new_abstract = self.levels['abstract'].update(further_attenuated)
-                    updated['abstract'] = new_abstract
-            
-            # Planning → Abstract
+                self._planning.update(attenuated_error)
             elif level == 'planning':
-                new_abstract = self.levels['abstract'].update(attenuated_error)
-                updated['abstract'] = new_abstract
+                self._abstract.update(attenuated_error)
+    
+    def get_all_values(self) -> Dict[str, float]:
+        """
+        Get all precision values as a dictionary.
         
-        return updated
+        Returns:
+            Dictionary with abstract, planning, execution values
+        """
+        return {
+            'abstract': self._abstract.value,
+            'planning': self._planning.value,
+            'execution': self._execution.value
+        }
+    
+    def reset(self) -> None:
+        """Reset all levels to initial values."""
+        self._abstract.reset()
+        self._planning.reset()
+        self._execution.reset()
     
     def should_adapt(self, level: str = 'execution') -> bool:
         """
-        Check if adaptation should be triggered at a level.
+        Check if adaptation is needed at specified level.
         
         Args:
             level: Level to check (default: 'execution')
         
         Returns:
-            bool: True if precision is below threshold at that level
+            True if adaptation should be triggered
         """
-        return self.levels[level].should_adapt()
-    
-    def reset(self, level: Optional[str] = None) -> None:
-        """
-        Reset precision to initial values.
-        
-        Args:
-            level: Specific level to reset, or None for all levels
-        """
-        if level is None:
-            for lvl in self.levels.values():
-                lvl.reset()
-        else:
-            if level not in self.levels:
-                raise ValueError(
-                    f"Invalid level: {level}. "
-                    f"Must be one of {list(self.levels.keys())}"
-                )
-            self.levels[level].reset()
-    
-    def get_all_values(self) -> Dict[str, float]:
-        """
-        Get precision values for all levels.
-        
-        Returns:
-            dict: Mapping of level names to precision values
-        """
-        return {
-            level: params.value
-            for level, params in self.levels.items()
-        }
-    
-    def get_all(self) -> Dict[str, float]:
-        """Alias for get_all_values for backward compatibility."""
-        return self.get_all_values()
-    
-    def __repr__(self) -> str:
-        """String representation of hierarchical precision."""
-        values = self.get_all_values()
-        return (
-            f"HierarchicalPrecision("
-            f"abstract={values['abstract']:.3f}, "
-            f"planning={values['planning']:.3f}, "
-            f"execution={values['execution']:.3f})"
-        )
+        return self.get_level(level).should_adapt()
 
 
-def create_hierarchical_precision(
-    propagation_threshold: float = 0.7,
-    attenuation_factor: float = 0.5,
-    gain_learning_rate: float = 0.1,
-    loss_learning_rate: float = 0.2
-) -> HierarchicalPrecision:
+def beta_mean(alpha: float, beta: float) -> float:
     """
-    Factory function to create a HierarchicalPrecision instance.
+    Calculate mean of Beta distribution.
     
     Args:
-        propagation_threshold: Error threshold for upward propagation
-        attenuation_factor: Factor to attenuate errors when propagating
-        gain_learning_rate: Learning rate for precision increases
-        loss_learning_rate: Learning rate for precision decreases
+        alpha: Alpha parameter
+        beta: Beta parameter
     
     Returns:
-        HierarchicalPrecision: Configured hierarchical precision tracker
-    
-    Example:
-        >>> hp = create_hierarchical_precision(
-        ...     propagation_threshold=0.8,
-        ...     attenuation_factor=0.3
-        ... )
-        >>> hp.update('execution', 0.9)
+        Mean = α/(α+β)
     """
-    return HierarchicalPrecision(
-        propagation_threshold=propagation_threshold,
-        attenuation_factor=attenuation_factor,
-        gain_learning_rate=gain_learning_rate,
-        loss_learning_rate=loss_learning_rate
-    )
+    return alpha / (alpha + beta)
+
+
+def beta_variance(alpha: float, beta: float) -> float:
+    """
+    Calculate variance of Beta distribution.
+    
+    Args:
+        alpha: Alpha parameter
+        beta: Beta parameter
+    
+    Returns:
+        Variance
+    """
+    a_plus_b = alpha + beta
+    return (alpha * beta) / (a_plus_b ** 2 * (a_plus_b + 1))

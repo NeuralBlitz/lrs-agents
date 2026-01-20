@@ -11,7 +11,7 @@
 ║                  🧠 Resilient AI Agents via Active Inference                ║
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
-
+```
   Version: 0.2.1
   
   ✨ Features:
@@ -30,7 +30,7 @@
   📖 Documentation: https://lrs-agents.readthedocs.io
   🐛 Issues:        https://github.com/NeuralBlitz/lrs-agents/issues
   ⭐ Star us:       https://github.com/NeuralBlitz/lrs-agents
-```
+
 
 # LRS-Agents: Resilient AI Agents via Active Inference
 

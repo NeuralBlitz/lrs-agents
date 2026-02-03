@@ -9,11 +9,8 @@ from typing import Dict, List, Optional, Any
 import json
 import time
 from openai import OpenAI
-from openai.types.beta import Assistant, Thread
-from openai.types.beta.threads import Run
 
 from lrs.core.lens import ToolLens, ExecutionResult
-from lrs.inference.prompts import MetaCognitivePrompter
 
 
 class OpenAIAssistantLens(ToolLens):
@@ -328,7 +325,6 @@ def create_openai_lrs_agent(
         ...     "messages": [{"role": "user", "content": "Task"}]
         ... })
     """
-    from lrs import create_lrs_agent
     from lrs.core.registry import ToolRegistry
     
     registry = ToolRegistry()

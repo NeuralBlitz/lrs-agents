@@ -3,7 +3,6 @@ Tests for multi-agent communication.
 """
 
 import pytest
-from unittest.mock import Mock
 
 from lrs.multi_agent.communication import (
     Message,

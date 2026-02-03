@@ -1,18 +1,12 @@
 #!/usr/bin/env python3
 """Bidirectional OpenCode ↔ LRS-Agents Integration."""
 
-import asyncio
-import json
-import os
 import subprocess
-import sys
-from typing import Dict, Any, List, Optional
-from pathlib import Path
+from typing import Dict, Any, Optional
 
 # LRS-Agents imports
 from lrs.core.lens import ToolLens, ExecutionResult
 from lrs.core.registry import ToolRegistry
-from lrs.core.precision import HierarchicalPrecision
 from lrs.integration.langgraph import create_lrs_agent
 
 # FastAPI for API integration

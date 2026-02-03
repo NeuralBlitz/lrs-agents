@@ -8,7 +8,7 @@ LRS-Agents Active Inference systems and NeuralBlitz-v50 Omega Architecture.
 import asyncio
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Callable, Union
+from typing import Dict, Any, Optional, Callable
 from dataclasses import dataclass, field
 import logging
 

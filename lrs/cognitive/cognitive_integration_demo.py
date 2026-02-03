@@ -8,14 +8,12 @@ Demonstrates cognitive architecture integration with OpenCode CLI and LRS-Agents
 
 import sys
 import os
-from pathlib import Path
 
 # Add current directory to path for imports
 sys.path.insert(0, os.path.dirname(__file__))
 
 from lrs_agents.lrs.opencode.lrs_opencode_integration import (
     CognitiveCodeAnalyzer,
-    LRSExecutionContext,
     COGNITIVE_COMPONENTS_AVAILABLE,
 )
 

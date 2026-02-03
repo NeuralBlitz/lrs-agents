@@ -9,12 +9,11 @@ import asyncio
 import json
 import re
 import logging
-from typing import Dict, Any, List, Optional, Tuple, Union
+from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from enum import Enum
 
-from ...core.lens import ToolLens, ExecutionResult
 from ...multi_agent.shared_state import SharedWorldState
 
 

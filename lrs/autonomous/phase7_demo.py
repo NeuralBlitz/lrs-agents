@@ -29,7 +29,7 @@ import json
 import os
 import sys
 from datetime import datetime
-from typing import Dict, List, Any
+from typing import Dict, Any
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -192,7 +192,7 @@ class AutonomousCodeGenerationDemo:
         total_scenarios = len(self.demo_results)
         successful_generations = len([r for r in self.demo_results if "result" in r])
 
-        print(f"📊 Demo Statistics:")
+        print("📊 Demo Statistics:")
         print(f"  • Total Scenarios: {total_scenarios}")
         print(f"  • Successful Generations: {successful_generations}")
         print(

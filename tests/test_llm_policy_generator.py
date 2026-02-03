@@ -9,11 +9,9 @@ Validates:
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
-import json
+from unittest.mock import Mock
 
 from lrs.inference.llm_policy_generator import LLMPolicyGenerator
-from lrs.inference.prompts import MetaCognitivePrompter, PromptContext
 from lrs.core.registry import ToolRegistry
 from lrs.core.lens import ToolLens
 

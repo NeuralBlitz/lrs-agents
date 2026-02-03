@@ -6,17 +6,13 @@ to create a production-ready, feature-rich agent management system.
 """
 
 import asyncio
-import json
 import logging
 from datetime import datetime, timedelta
 
 # Import all TUI integration components
 from lrs.integration.tui import (
     TUIBridge,
-    TUIConfig,
     TUIConfigManager,
-    TUIInteractionTool,
-    TUIStateMirror,
     TUIPrecisionMapper,
     TUIPluginManager,
     TUIAIAssistant,
@@ -257,7 +253,7 @@ class CompleteTUISystem:
         # Get optimization recommendations
         recommendations = await self.optimizer.get_optimization_recommendations("agent_1")
 
-        self.logger.info(f"Recommendations for agent_1:")
+        self.logger.info("Recommendations for agent_1:")
         for rec in recommendations.get("recommendations", []):
             self.logger.info(f"  - {rec['optimization_type'].value}: {rec['description']}")
             self.logger.info(f"    Expected improvement: {rec.get('expected_improvement', 'N/A')}")

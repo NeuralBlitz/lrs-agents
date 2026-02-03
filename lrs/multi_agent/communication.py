@@ -1,12 +1,11 @@
 """Communication mechanisms for multi-agent LRS systems."""
 
-from typing import Dict, Any, Optional, List, Callable
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum  # ADD THIS
 
 from lrs.core.lens import ToolLens, ExecutionResult
-from lrs.multi_agent.social_precision import SocialPrecisionTracker
 
 
 class MessageType(Enum):
@@ -49,7 +48,7 @@ class Message:
     to_agent: str
     message_type: MessageType
     content: Any
-    timestamp: str = None
+    timestamp: Optional[str] = None
     in_reply_to: Optional[str] = None
 
     def __post_init__(self):
@@ -80,7 +79,7 @@ class CommunicationLens(ToolLens):
         ... })
     """
 
-    def __init__(self, agent_id: str, shared_state: "SharedWorldState", message_cost: float = 0.1):
+    def __init__(self, agent_id: str, shared_state, message_cost: float = 0.1):
         """
         Initialize communication tool.
 

@@ -1,9 +1,4 @@
 {
-  "test_free_energy.py::TestEpistemicValue::test_novel_tool_high_entropy": true,
-  "test_free_energy.py::TestEpistemicValue::test_known_tool_low_entropy": true,
-  "test_free_energy.py::TestEpistemicValue::test_uncertain_tool_medium_entropy": true,
-  "test_free_energy.py::TestEpistemicValue::test_multi_tool_policy": true,
-  "test_free_energy.py::TestPragmaticValue::test_high_success_high_pragmatic": true,
   "test_free_energy.py::TestPragmaticValue::test_low_success_low_pragmatic": true,
   "test_free_energy.py::TestPragmaticValue::test_temporal_discounting": true,
   "test_free_energy.py::TestPragmaticValue::test_step_cost": true,
@@ -44,5 +39,7 @@
   "test_multi_agent_free_energy.py::TestCommunicationDecision::test_communicate_when_G_lower": true,
   "test_multi_agent_free_energy.py::TestCommunicationDecision::test_dont_communicate_when_G_higher": true,
   "test_social_precision.py::TestRecursiveBeliefState::test_should_share_uncertainty_when_mismatch": true,
-  "test_chaos_scriptorium.py::TestChaosEnvironment::test_reset_environment": true
+  "test_chaos_scriptorium.py::TestChaosEnvironment::test_reset_environment": true,
+  "test_chaos_scriptorium.py::TestChaosEnvironment::test_chaos_triggered_at_interval": true,
+  "test_chaos_scriptorium.py::TestChaosTools::test_shell_tool_often_fails_when_locked": true
 }

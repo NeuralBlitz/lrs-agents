@@ -113,6 +113,7 @@ pip install lrs-agents[all]
 
 ```python
 from lrs import create_lrs_agent
+from lrs.multi_agent import MultiAgentCoordinator, SocialPrecisionTracker, CommunicationLens
 from lrs.core.lens import ToolLens, ExecutionResult
 from langchain_anthropic import ChatAnthropic
 import random
@@ -174,6 +175,23 @@ result = agent.invoke({
 
 print(result['messages'][-1]['content'])
 # Output: Successfully retrieved data via cache (after API failures)
+
+# Multi-agent coordination example
+from lrs.multi_agent import MultiAgentCoordinator
+
+coordinator = MultiAgentCoordinator()
+coordinator.register_agent("agent_a", agent)
+coordinator.register_agent("agent_b", agent)
+
+# Run coordination with social intelligence
+results = coordinator.run(
+    task="Coordinate warehouse operations",
+    max_rounds=10
+)
+
+print(f"Rounds: {results['total_rounds']}")
+print(f"Messages: {results['total_messages']}")
+print(f"Social Precisions: {results['social_precisions']}")
 ```
 
 **What happened:**
@@ -186,6 +204,87 @@ print(result['messages'][-1]['content'])
 1. Cache succeeds → Task completed! ✨
 
 No manual retry logic. No complex error handling. Just intelligent adaptation.
+
+-----
+
+## 🤝 Multi-Agent Intelligence
+
+LRS-Agents now supports **social intelligence** - agents that reason about each other and coordinate intelligently.
+
+### **Social Precision Tracking**
+
+```python
+from lrs.multi_agent import SocialPrecisionTracker
+
+tracker = SocialPrecisionTracker(agent_id="agent_a")
+tracker.register_agent("agent_b")
+
+# Agent A observes Agent B's behavior
+tracker.update_social_precision(
+    other_agent_id="agent_b",
+    predicted_action="fetch_data", 
+    observed_action="use_cache"  # Surprise!
+)
+
+print(tracker.get_social_precision("agent_b"))  # Decreased
+```
+
+**Key Features:**
+- **Trust Dynamics**: Track confidence in other agents' behavior
+- **Adaptive Communication**: Decide when to communicate vs act independently
+- **Recursive Theory-of-Mind**: Model what others think about you
+
+### **Agent Coordination**
+
+```python
+from lrs.multi_agent import MultiAgentCoordinator
+
+coordinator = MultiAgentCoordinator()
+coordinator.register_agent("planner", planner_agent)
+coordinator.register_agent("executor", executor_agent) 
+coordinator.register_agent("monitor", monitor_agent)
+
+# Agents coordinate with turn-taking and messaging
+results = coordinator.run(
+    task="Process customer order end-to-end",
+    max_rounds=20
+)
+
+# Get coordination insights
+print(f"Social trust levels: {results['social_precisions']}")
+print(f"Communication efficiency: {results['total_messages']}")
+```
+
+**Coordination Features:**
+- **Turn-based execution** - Fair scheduling with customizable order
+- **Shared world state** - Common ground truth for all agents  
+- **Automatic messaging** - Agents communicate when social precision is low
+- **Hierarchical free energy** - Balance environmental vs social uncertainty
+
+### **Communication as Information Seeking**
+
+Communication is modeled as an epistemic action that reduces social uncertainty:
+
+```python
+# Low social precision + high environmental precision = communicate
+should_message = tracker.should_communicate(
+    other_agent_id="agent_b",
+    env_precision=0.8  # Environment is reliable
+)
+
+if should_message:
+    comm_tool = CommunicationLens("agent_a", shared_state)
+    result = comm_tool.get({
+        "to_agent": "agent_b",
+        "message_type": "query",
+        "content": "What's your current status?"
+    })
+```
+
+**Social Decision Making:**
+- **High social precision** → Act independently (trust other agent)
+- **Low social precision** → Communicate to reduce uncertainty
+- **Low environmental precision** → Focus on environmental tools, not social
 
 -----
 
@@ -732,10 +831,14 @@ make html
 
 ## 🗺️ Roadmap
 
-### v0.3.0 (Q2 2025)
+### v0.3.0 - Social Intelligence (COMPLETED)
 
+- [x] **Social Precision Tracking** - Track confidence in other agents
+- [x] **Communication Lens** - Message passing between agents
+- [x] **Multi-Agent Coordinator** - Turn-based execution
+- [x] **Recursive Theory-of-Mind** - Model others' beliefs about you
+- [x] **Shared World State** - Observable state for coordination
 - [ ] Meta-learning of precision parameters
-- [ ] Multi-agent coordination primitives
 - [ ] Tool learning and discovery
 - [ ] Advanced visualization dashboard
 

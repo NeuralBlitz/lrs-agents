@@ -1,8 +1,7 @@
 """Precision tracking for Active Inference agents."""
 
 from dataclasses import dataclass, field
-from typing import Dict, Optional
-import numpy as np
+from typing import Dict
 
 
 @dataclass

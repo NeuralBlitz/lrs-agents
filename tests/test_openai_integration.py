@@ -3,9 +3,8 @@ Tests for OpenAI Assistants integration.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock
 import json
-import time
 
 from lrs.integration.openai_assistants import (
     OpenAIAssistantLens,

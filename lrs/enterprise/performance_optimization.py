@@ -10,14 +10,11 @@ import os
 import time
 import hashlib
 import pickle
-import threading
 from typing import Dict, Any, Optional, List
 from pathlib import Path
-from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Import our components
-from lrs_agents.lrs.opencode.lightweight_lrs import LightweightHierarchicalPrecision
 from lrs_agents.lrs.opencode.lrs_opencode_integration import ActiveInferenceAnalyzer
 
 

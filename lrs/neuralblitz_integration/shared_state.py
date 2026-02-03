@@ -6,14 +6,12 @@ between LRS-Agents Active Inference systems and NeuralBlitz-v50 Omega Architectu
 """
 
 import asyncio
-import threading
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Set, Callable
-from dataclasses import dataclass, field, asdict
+from typing import Dict, Any, Optional, Set, Callable
+from dataclasses import dataclass, field
 from enum import Enum
 import json
 import logging
-import weakref
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)

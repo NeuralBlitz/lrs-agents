@@ -4,9 +4,8 @@ Social precision tracking for multi-agent systems.
 Tracks confidence in other agents' models via prediction errors on their actions.
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Any
 from dataclasses import dataclass
-import numpy as np
 
 from lrs.core.precision import PrecisionParameters
 

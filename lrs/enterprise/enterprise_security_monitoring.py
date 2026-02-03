@@ -6,8 +6,6 @@ Production-grade security, monitoring, and enterprise features for
 the LRS-OpenCode integration platform.
 """
 
-import os
-import json
 import time
 import hashlib
 import secrets
@@ -22,7 +20,6 @@ from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from pydantic import BaseModel, Field
 import jwt
 
 
@@ -642,7 +639,7 @@ async def login(request: Request, username: str, password: str):
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         enterprise_monitor.record_request(
             "/enterprise/auth/login", "POST", time.time() - start_time, 500
         )
@@ -684,7 +681,7 @@ async def create_user(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         enterprise_monitor.record_request(
             "/enterprise/auth/create-user",
             "POST",
@@ -713,7 +710,7 @@ async def get_security_status(current_user: Dict = Depends(check_permissions("ad
 
         return status_data
 
-    except Exception as e:
+    except Exception:
         enterprise_monitor.record_request(
             "/enterprise/security/status",
             "GET",
@@ -746,7 +743,7 @@ async def get_audit_log(
 
         return {"audit_entries": audit_data}
 
-    except Exception as e:
+    except Exception:
         enterprise_monitor.record_request(
             "/enterprise/security/audit",
             "GET",
@@ -771,7 +768,7 @@ async def get_system_health():
 
         return health_data
 
-    except Exception as e:
+    except Exception:
         enterprise_monitor.record_request(
             "/monitoring/health", "GET", time.time() - start_time, 500, "public"
         )
@@ -798,7 +795,7 @@ async def get_performance_report(
 
         return report
 
-    except Exception as e:
+    except Exception:
         enterprise_monitor.record_request(
             "/monitoring/performance",
             "GET",
@@ -829,7 +826,7 @@ async def get_alerts(current_user: Dict = Depends(check_permissions("operator"))
 
         return {"alerts": alerts, "total_active": len(alerts)}
 
-    except Exception as e:
+    except Exception:
         enterprise_monitor.record_request(
             "/monitoring/alerts",
             "GET",
@@ -871,7 +868,7 @@ async def acknowledge_alert(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         enterprise_monitor.record_request(
             f"/monitoring/alerts/{alert_index}/acknowledge",
             "POST",

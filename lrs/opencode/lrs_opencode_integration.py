@@ -6,19 +6,15 @@ Advanced tools that integrate LRS-Agents capabilities into OpenCode CLI.
 These tools leverage Active Inference, precision tracking, and hierarchical planning.
 """
 
-import json
 import os
 import sys
-import math
 from typing import Dict, Any, List, Optional
-from pathlib import Path
 from dataclasses import dataclass, field
 
 # Import our simplified LRS components
-from .simplified_integration import OpenCodeTool, SimplifiedLRSAgent
+from .simplified_integration import OpenCodeTool
 
 # Import will be done locally to avoid circular imports
-from ..cognitive.precision_calibration import precision_calibrator, DomainCalibration
 
 # Import cognitive architecture components
 try:
@@ -490,7 +486,7 @@ class PrecisionGuidedRefactor(OpenCodeTool):
 
         for line in lines:
             if any(
-                line.strip().startswith(f"def ")
+                line.strip().startswith("def ")
                 for f in ["def ", "function ", "public ", "private "]
             ):
                 if current_function:
@@ -1222,7 +1218,7 @@ def opencode_lrs_command(args: List[str]) -> str:
             output += f"🧠 Average Complexity: {result['avg_complexity']:.2f}\n"
             output += f"🎯 Free Energy G: {result['free_energy']:.3f}\n"
             output += f"⏱️  Total Time: {result.get('total_time', result.get('analysis_time', 'N/A')):.2f}s ⚡\n"
-            output += f"💾 Cached: Results cached for future use\n\n"
+            output += "💾 Cached: Results cached for future use\n\n"
             output += "💡 Recommendations:\n"
             for rec in result["recommendations"][:3]:
                 output += f"   • {rec}\n"
@@ -1414,8 +1410,8 @@ if __name__ == "__main__":
     )
     print(f"✅ Policy Evaluator: {len(evaluation['evaluations'])} strategies evaluated")
 
-    print(f"\n🎉 All LRS tools integrated successfully!")
-    print(f"Use: opencode lrs <command> [args...]")
+    print("\n🎉 All LRS tools integrated successfully!")
+    print("Use: opencode lrs <command> [args...]")
 
     # Register cognitive-enhanced tools after class definitions
     if COGNITIVE_COMPONENTS_AVAILABLE:

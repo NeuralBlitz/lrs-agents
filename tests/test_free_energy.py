@@ -2,7 +2,6 @@
 
 import pytest
 import numpy as np
-from typing import Dict
 
 from lrs.core.free_energy import (
     calculate_epistemic_value,
@@ -13,7 +12,6 @@ from lrs.core.free_energy import (
     PolicyEvaluation,
 )
 from lrs.core.lens import ToolLens, ExecutionResult
-from lrs.core.registry import ToolRegistry
 
 
 class MockTool(ToolLens):

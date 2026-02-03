@@ -8,7 +8,6 @@ interaction handling.
 
 import asyncio
 import logging
-import json
 from typing import Dict, Any, List, Optional, Callable
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -16,8 +15,6 @@ from dataclasses import dataclass, field
 from ...multi_agent.coordinator import MultiAgentCoordinator
 from ...multi_agent.shared_state import SharedWorldState
 from ...core.registry import ToolRegistry
-from .state_mirror import TUIStateMirror
-from .tool import TUIInteractionTool
 
 
 @dataclass

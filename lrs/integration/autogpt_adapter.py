@@ -5,7 +5,6 @@ Replaces AutoGPT's command execution loop with LRS Active Inference dynamics.
 """
 
 from typing import Dict, List, Any, Optional, Callable
-import json
 
 from lrs.core.lens import ToolLens, ExecutionResult
 from lrs.core.registry import ToolRegistry

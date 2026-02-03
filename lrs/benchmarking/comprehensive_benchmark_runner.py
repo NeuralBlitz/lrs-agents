@@ -9,12 +9,10 @@ Validates Phase 2 improvements and provides comprehensive performance metrics.
 import json
 import time
 import statistics
-from typing import Dict, Any, List
-from pathlib import Path
+from typing import Dict, Any
 
 # Import our optimized and calibrated components
 from lrs_agents.lrs.benchmarking.lightweight_benchmarks import LightweightChaosBenchmark, LightweightGAIABenchmark
-from lrs_agents.lrs.cognitive.precision_calibration import precision_calibrator
 from lrs_agents.lrs.enterprise.performance_optimization import run_optimized_analysis
 
 

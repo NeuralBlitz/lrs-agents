@@ -5,13 +5,11 @@ This tool treats TUI interactions as first-class LRS tools, allowing
 agents to query, command, and synchronize with the opencode TUI.
 """
 
-import json
 import asyncio
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any
 from datetime import datetime
 
 from ...core.lens import ToolLens, ExecutionResult
-from ...core.precision import PrecisionParameters
 
 
 class TUIInteractionTool(ToolLens):

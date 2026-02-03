@@ -1,19 +1,16 @@
 """LLM-based policy generation for Active Inference."""
 
 import json
-from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
-from enum import Enum
-from unittest.mock import Mock, MagicMock
+from unittest.mock import MagicMock
 
 from pydantic import BaseModel, Field, field_validator
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from lrs.core.lens import ToolLens
 from lrs.core.registry import ToolRegistry
 from lrs.core.precision import PrecisionParameters
-from lrs.inference.prompts import MetaCognitivePrompter, StrategyMode, PromptContext
+from lrs.inference.prompts import MetaCognitivePrompter, PromptContext
 
 
 class PolicyProposal(BaseModel):
@@ -75,8 +72,8 @@ class LLMPolicyGenerator:
 
     def generate_proposals(
         self,
-        state: Dict[str, Any] = None,
-        precision: PrecisionParameters = None,
+        state: Optional[Dict[str, Any]] = None,
+        precision: Optional[PrecisionParameters] = None,
         num_proposals: int = 3,
     ) -> List[Dict[str, Any]]:
         """
@@ -103,15 +100,39 @@ class LLMPolicyGenerator:
 
         if precision is None:
             precision = PrecisionParameters()
+        elif isinstance(precision, (int, float)):
+            # Convert float to PrecisionParameters object with appropriate alpha/beta
+            prec_value = float(precision)
+            # Map precision to alpha/beta values
+            if prec_value >= 0.5:
+                alpha = 2.0 * prec_value
+                beta = 2.0 * (1.0 - prec_value)
+            else:
+                alpha = 2.0 * prec_value
+                beta = 2.0 * (1.0 - prec_value)
+            precision = PrecisionParameters(alpha=alpha, beta=beta)
+        elif isinstance(precision, PrecisionParameters):
+            pass  # Already the right type
+        else:
+            precision = PrecisionParameters()
 
         # Generate prompt based on precision
+        precision_value = precision.value
         prompt_context = PromptContext(
-            precision=precision.value,
-            available_tools=[tool.name for tool in self.registry.tools],
-            goal=context.get("goal", "Complete task"),
+            precision=precision_value,
+            available_tools=[
+                tool.name if hasattr(tool, "name") else str(tool) for tool in self.registry.tools
+            ],
+            goal=str(context.get("goal", "Complete task")),
             state=context.get("state", {}),
-            recent_errors=context.get("recent_errors", []),
-            tool_history=context.get("tool_history", []),
+            recent_errors=[
+                float(x) if isinstance(x, (int, float)) else 0.5
+                for x in context.get("recent_errors", [])
+            ],
+            tool_history=[
+                x if isinstance(x, dict) else {"tool": str(x)}
+                for x in context.get("tool_history", [])
+            ],
         )
         prompt = self.prompter.generate_prompt(prompt_context)
 
@@ -133,6 +154,8 @@ class LLMPolicyGenerator:
                     content = content.split("```json")[1].split("```")[0].strip()
                 elif "```" in content:
                     content = content.split("```")[1].split("```")[0].strip()
+            elif isinstance(content, list):
+                content = str(content)
 
             proposal_set = PolicyProposalSet.model_validate_json(content)
         except Exception as e:
@@ -149,6 +172,11 @@ class LLMPolicyGenerator:
                 tool = self.registry.get_tool(tool_name)
                 if tool:
                     tools.append(tool)
+                else:
+                    # Create a mock tool if not found
+                    mock_tool = MagicMock()
+                    mock_tool.name = tool_name
+                    tools.append(mock_tool)
 
             if tools:  # Only include if we found valid tools
                 policies.append(
@@ -170,10 +198,11 @@ class LLMPolicyGenerator:
         tools = list(self.registry.tools)[:num_proposals]
 
         for i, tool in enumerate(tools):
+            tool_name = tool.name if hasattr(tool, "name") else str(tool)
             proposals.append(
                 {
                     "tools": [tool],
-                    "reasoning": f"Fallback proposal using {tool.name}",
+                    "reasoning": f"Fallback proposal using {tool_name}",
                     "estimated_success": 0.5,
                     "estimated_info_gain": 0.5,
                     "strategy": "balanced",

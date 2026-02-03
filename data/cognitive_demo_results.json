@@ -1,0 +1,301 @@
+{
+  "performance_validated": false,
+  "total_analysis_time": 0.7408652305603027,
+  "total_lines_analyzed": 601,
+  "cognitive_effectiveness": {
+    "attention_patterns": 17,
+    "patterns_recognized": 23,
+    "avg_cognitive_cycles": 252.0
+  },
+  "codebase_results": {
+    "react_app": {
+      "analysis_time": 0.07668709754943848,
+      "lines_analyzed": 54,
+      "cognitive_insights": {
+        "total_lines_analyzed": 47,
+        "average_attention_score": 0.4805360966142503,
+        "high_attention_elements": 0,
+        "attention_patterns_found": 0,
+        "pattern_distribution": {
+          "function_definition": 21,
+          "import_statement": 6,
+          "return_statement": 2,
+          "conditional_statement": 4,
+          "exception_handling": 4,
+          "loop_statement": 2,
+          "unknown": 8
+        },
+        "cognitive_state": {
+          "cognitive_enabled": true,
+          "cognitive_insights_count": 47,
+          "attention_patterns_count": 2,
+          "memory_state": {
+            "cognitive_cycles": 47,
+            "attention_focus": null,
+            "attention_history_length": 20,
+            "working_memory_items": 4,
+            "long_term_memory_items": 3,
+            "temporal_sequences_learned": 47,
+            "sequence_patterns_learned": 45,
+            "transition_patterns_learned": 4,
+            "anomalies_detected": 3,
+            "predictions_active": 4,
+            "working_memory_attention_avg": 0.7248214375503094,
+            "working_memory_decay_avg": 0.95099004,
+            "total_memory_chunks": 4,
+            "avg_chunk_size": 1.0,
+            "rehearsed_memory_items": 0,
+            "patterns_learned": 7,
+            "learning_enabled": true,
+            "pattern_recognizer_stats": {
+              "patterns_learned": 7,
+              "pattern_names": [
+                "function_definition",
+                "class_definition",
+                "import_statement",
+                "conditional_statement",
+                "loop_statement",
+                "exception_handling",
+                "return_statement"
+              ],
+              "network_size": 30,
+              "synaptic_connections": 82,
+              "connectivity": 0.09111111111111111,
+              "recognition_threshold": 0.7
+            },
+            "temporal_learner_stats": {
+              "sequence_patterns": 45,
+              "transition_probabilities": 4,
+              "temporal_memory_size": 0,
+              "prediction_accuracy_avg": 0.0
+            },
+            "recent_attention_items": [
+              {
+                "element": ");",
+                "score": 0.30799485897628176,
+                "context": "general"
+              },
+              {
+                "element": "}",
+                "score": 0.3055197989227445,
+                "context": "general"
+              },
+              {
+                "element": "export default UserD",
+                "score": 0.46468256574430333,
+                "context": "general"
+              }
+            ],
+            "recent_memory_keys": [
+              "prediction_1769179878.0766356",
+              "prediction_1769179878.078424",
+              "prediction_1769179878.080346",
+              "prediction_1769179878.0818534"
+            ]
+          },
+          "cognitive_cycles": 47,
+          "patterns_learned": 7,
+          "working_memory_items": 4,
+          "attention_focus": null,
+          "temporal_sequences_learned": 47
+        }
+      },
+      "attention_patterns": 0,
+      "patterns_recognized": 7
+    },
+    "data_pipeline": {
+      "analysis_time": 0.25381970405578613,
+      "lines_analyzed": 204,
+      "cognitive_insights": {
+        "total_lines_analyzed": 164,
+        "average_attention_score": 0.5142061332289201,
+        "high_attention_elements": 7,
+        "attention_patterns_found": 7,
+        "pattern_distribution": {
+          "import_statement": 14,
+          "function_definition": 99,
+          "conditional_statement": 8,
+          "class_definition": 7,
+          "unknown": 8,
+          "loop_statement": 17,
+          "exception_handling": 7,
+          "return_statement": 4
+        },
+        "cognitive_state": {
+          "cognitive_enabled": true,
+          "cognitive_insights_count": 211,
+          "attention_patterns_count": 18,
+          "memory_state": {
+            "cognitive_cycles": 211,
+            "attention_focus": "'y_test': split_data[3].shape if split_data[3] is not None else None",
+            "attention_history_length": 20,
+            "working_memory_items": 8,
+            "long_term_memory_items": 7,
+            "temporal_sequences_learned": 100,
+            "sequence_patterns_learned": 206,
+            "transition_patterns_learned": 8,
+            "anomalies_detected": 7,
+            "predictions_active": 4,
+            "working_memory_attention_avg": 0.7977826899312702,
+            "working_memory_decay_avg": 0.9729950199999999,
+            "total_memory_chunks": 16,
+            "avg_chunk_size": 2.0,
+            "rehearsed_memory_items": 3,
+            "patterns_learned": 7,
+            "learning_enabled": true,
+            "pattern_recognizer_stats": {
+              "patterns_learned": 7,
+              "pattern_names": [
+                "function_definition",
+                "class_definition",
+                "import_statement",
+                "conditional_statement",
+                "loop_statement",
+                "exception_handling",
+                "return_statement"
+              ],
+              "network_size": 30,
+              "synaptic_connections": 82,
+              "connectivity": 0.09111111111111111,
+              "recognition_threshold": 0.7
+            },
+            "temporal_learner_stats": {
+              "sequence_patterns": 206,
+              "transition_probabilities": 8,
+              "temporal_memory_size": 0,
+              "prediction_accuracy_avg": 0.0
+            },
+            "recent_attention_items": [
+              {
+                "element": "processor = DataProc",
+                "score": 0.493435832002616,
+                "context": "general"
+              },
+              {
+                "element": "result = processor.p",
+                "score": 0.4931243534936109,
+                "context": "general"
+              },
+              {
+                "element": "print(\"Processing re",
+                "score": 0.49283241760094343,
+                "context": "general"
+              }
+            ],
+            "recent_memory_keys": [
+              "prediction_1769179878.3313186",
+              "prediction_1769179878.3329191",
+              "prediction_1769179878.3342576",
+              "prediction_1769179878.3355567",
+              "general_571"
+            ]
+          },
+          "cognitive_cycles": 211,
+          "patterns_learned": 7,
+          "working_memory_items": 8,
+          "attention_focus": "'y_test': split_data[3].shape if split_data[3] is not None else None",
+          "temporal_sequences_learned": 100
+        }
+      },
+      "attention_patterns": 7,
+      "patterns_recognized": 8
+    },
+    "fastapi_service": {
+      "analysis_time": 0.4103584289550781,
+      "lines_analyzed": 343,
+      "cognitive_insights": {
+        "total_lines_analyzed": 287,
+        "average_attention_score": 0.49901246077962497,
+        "high_attention_elements": 10,
+        "attention_patterns_found": 10,
+        "pattern_distribution": {
+          "function_definition": 153,
+          "return_statement": 24,
+          "conditional_statement": 14,
+          "loop_statement": 26,
+          "class_definition": 9,
+          "import_statement": 33,
+          "exception_handling": 5,
+          "unknown": 23
+        },
+        "cognitive_state": {
+          "cognitive_enabled": true,
+          "cognitive_insights_count": 498,
+          "attention_patterns_count": 38,
+          "memory_state": {
+            "cognitive_cycles": 498,
+            "attention_focus": "def verify_password(plain_password: str, hashed_password: str) -> bool:",
+            "attention_history_length": 20,
+            "working_memory_items": 11,
+            "long_term_memory_items": 7,
+            "temporal_sequences_learned": 100,
+            "sequence_patterns_learned": 455,
+            "transition_patterns_learned": 8,
+            "anomalies_detected": 7,
+            "predictions_active": 4,
+            "working_memory_attention_avg": 0.8817758939683503,
+            "working_memory_decay_avg": 0.9821781963636362,
+            "total_memory_chunks": 29,
+            "avg_chunk_size": 2.6363636363636362,
+            "rehearsed_memory_items": 7,
+            "patterns_learned": 7,
+            "learning_enabled": true,
+            "pattern_recognizer_stats": {
+              "patterns_learned": 7,
+              "pattern_names": [
+                "function_definition",
+                "class_definition",
+                "import_statement",
+                "conditional_statement",
+                "loop_statement",
+                "exception_handling",
+                "return_statement"
+              ],
+              "network_size": 30,
+              "synaptic_connections": 82,
+              "connectivity": 0.09111111111111111,
+              "recognition_threshold": 0.7
+            },
+            "temporal_learner_stats": {
+              "sequence_patterns": 455,
+              "transition_probabilities": 8,
+              "temporal_memory_size": 0,
+              "prediction_accuracy_avg": 0.0
+            },
+            "recent_attention_items": [
+              {
+                "element": "reload=True,",
+                "score": 0.48800029583429483,
+                "context": "general"
+              },
+              {
+                "element": "log_level=\"info\"",
+                "score": 0.4880002810425249,
+                "context": "general"
+              },
+              {
+                "element": ")",
+                "score": 0.41510026699034897,
+                "context": "general"
+              }
+            ],
+            "recent_memory_keys": [
+              "function_definition_997",
+              "prediction_1769179878.739678",
+              "prediction_1769179878.7418578",
+              "prediction_1769179878.743851",
+              "prediction_1769179878.745905"
+            ]
+          },
+          "cognitive_cycles": 498,
+          "patterns_learned": 7,
+          "working_memory_items": 11,
+          "attention_focus": "def verify_password(plain_password: str, hashed_password: str) -> bool:",
+          "temporal_sequences_learned": 100
+        }
+      },
+      "attention_patterns": 10,
+      "patterns_recognized": 8
+    }
+  }
+}

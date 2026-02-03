@@ -1,0 +1,114 @@
+{
+  "initialization_time": {
+    "metric_name": "initialization_time",
+    "baseline_value": 0.001,
+    "tolerance_percent": 15.0,
+    "samples": [
+      0.001,
+      0.001,
+      0.001,
+      0.001,
+      0.001,
+      0.001,
+      0.001
+    ],
+    "last_updated": 1769166066.4894016
+  },
+  "memory_usage": {
+    "metric_name": "memory_usage",
+    "baseline_value": 1500000,
+    "tolerance_percent": 15.0,
+    "samples": [
+      1500000,
+      1500000,
+      1500000,
+      1500000,
+      1500000,
+      1500000,
+      1500000
+    ],
+    "last_updated": 1769166066.8536427
+  },
+  "coordination_time": {
+    "metric_name": "coordination_time",
+    "baseline_value": 1.1273792811802455e-05,
+    "tolerance_percent": 15.0,
+    "samples": [
+      8.344650268554688e-06,
+      1.52587890625e-05,
+      6.67572021484375e-06,
+      1.2636184692382812e-05,
+      6.198883056640625e-06,
+      2.002716064453125e-05,
+      9.775161743164062e-06
+    ],
+    "last_updated": 1769166067.547578
+  },
+  "agents_created": {
+    "metric_name": "agents_created",
+    "baseline_value": 5,
+    "tolerance_percent": 15.0,
+    "samples": [
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5
+    ],
+    "last_updated": 1769166067.5789385
+  },
+  "analysis_time": {
+    "metric_name": "analysis_time",
+    "baseline_value": 0.13185834884643555,
+    "tolerance_percent": 20.0,
+    "samples": [
+      0.0010085105895996094,
+      0.004262447357177734,
+      0.0005962848663330078,
+      0.0019207000732421875,
+      0.00015354156494140625,
+      0.0909261703491211,
+      0.8241407871246338
+    ],
+    "last_updated": 1769166068.4646645
+  },
+  "files_processed": {
+    "metric_name": "files_processed",
+    "baseline_value": 40,
+    "tolerance_percent": 15.0,
+    "samples": [
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40
+    ],
+    "last_updated": 1769166069.8485634
+  },
+  "avg_complexity": {
+    "metric_name": "avg_complexity",
+    "baseline_value": 1.3716319995107378,
+    "tolerance_percent": 15.0,
+    "samples": [
+      1.3716319995107378,
+      1.3716319995107378,
+      1.3716319995107378,
+      1.3716319995107378,
+      1.3716319995107378,
+      1.3716319995107378,
+      1.3716319995107378
+    ],
+    "last_updated": 1769166071.0373225
+  },
+  "auth_time": {
+    "metric_name": "auth_time",
+    "baseline_value": 0.5,
+    "tolerance_percent": 15.0,
+    "samples": [],
+    "last_updated": 1769166055.7030168
+  }
+}

@@ -1,0 +1,158 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: integration-bridge
+  namespace: integration-bridge
+  labels:
+    app: integration-bridge
+    version: v1.0.0
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: integration-bridge
+  template:
+    metadata:
+      labels:
+        app: integration-bridge
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: integration-bridge
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: integration-bridge
+        image: opencode-lrs-bridge:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 9000
+          name: http
+          protocol: TCP
+        - containerPort: 9001
+          name: websocket
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: API_HOST
+          value: "0.0.0.0"
+        - name: API_PORT
+          value: "9000"
+        - name: WS_PORT
+          value: "9001"
+        - name: WORKERS
+          value: "4"
+        - name: DB_URL
+          valueFrom:
+            secretKeyRef:
+              name: integration-bridge-secrets
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: integration-bridge-secrets
+              key: redis-url
+        - name: SECURITY_ENABLE_MTLS
+          value: "true"
+        - name: SECURITY_CERT_FILE
+          value: "/app/certs/tls.crt"
+        - name: SECURITY_KEY_FILE
+          value: "/app/certs/tls.key"
+        - name: SECURITY_CA_FILE
+          value: "/app/certs/ca.crt"
+        - name: SECURITY_OAUTH_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: integration-bridge-secrets
+              key: oauth-client-id
+        - name: SECURITY_OAUTH_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: integration-bridge-secrets
+              key: oauth-client-secret
+        - name: OPENCODE_BASE_URL
+          value: "http://opencode-service.integration-bridge.svc.cluster.local:8080"
+        - name: LRS_BASE_URL
+          value: "http://lrs-agents-service.integration-bridge.svc.cluster.local:8000"
+        - name: MONITORING_ENABLE_METRICS
+          value: "true"
+        - name: MONITORING_ENABLE_LOGGING
+          value: "true"
+        - name: MONITORING_LOG_LEVEL
+          value: "INFO"
+        volumeMounts:
+        - name: certs
+          mountPath: /app/certs
+          readOnly: true
+        - name: logs
+          mountPath: /app/logs
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9000
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 9000
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: certs
+        secret:
+          secretName: integration-bridge-tls
+      - name: logs
+        emptyDir: {}
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+      - key: "workload"
+        operator: "Equal"
+        value: "integration"
+        effect: "NoSchedule"
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - integration-bridge
+              topologyKey: kubernetes.io/hostname

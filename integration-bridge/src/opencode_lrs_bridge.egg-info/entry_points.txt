@@ -1,0 +1,2 @@
+[console_scripts]
+opencode-lrs-bridge = opencode_lrs_bridge.cli:main

@@ -1,0 +1,167 @@
+{
+  "chaos": {
+    "success_rate": 1.0,
+    "total_trials": 5,
+    "successes": 5,
+    "failures": 0,
+    "avg_steps": 1.0,
+    "avg_execution_time": 9.6893310546875e-05,
+    "all_results": [
+      {
+        "success": true,
+        "steps": 1,
+        "execution_time": 0.0001049041748046875,
+        "final_precision": {
+          "abstract": 0.5,
+          "planning": 0.5,
+          "execution": 0.5
+        },
+        "tools_used": [
+          "shell_exec",
+          "file_read"
+        ],
+        "tool_stats": {
+          "shell_exec": {
+            "calls": 0,
+            "success_rate": 0.5
+          },
+          "file_read": {
+            "calls": 1,
+            "success_rate": 1.0
+          }
+        }
+      },
+      {
+        "success": true,
+        "steps": 1,
+        "execution_time": 8.440017700195312e-05,
+        "final_precision": {
+          "abstract": 0.5,
+          "planning": 0.5,
+          "execution": 0.5
+        },
+        "tools_used": [
+          "shell_exec",
+          "file_read"
+        ],
+        "tool_stats": {
+          "shell_exec": {
+            "calls": 0,
+            "success_rate": 0.5
+          },
+          "file_read": {
+            "calls": 1,
+            "success_rate": 1.0
+          }
+        }
+      },
+      {
+        "success": true,
+        "steps": 1,
+        "execution_time": 6.461143493652344e-05,
+        "final_precision": {
+          "abstract": 0.5,
+          "planning": 0.5,
+          "execution": 0.5
+        },
+        "tools_used": [
+          "shell_exec",
+          "file_read"
+        ],
+        "tool_stats": {
+          "shell_exec": {
+            "calls": 0,
+            "success_rate": 0.5
+          },
+          "file_read": {
+            "calls": 1,
+            "success_rate": 1.0
+          }
+        }
+      },
+      {
+        "success": true,
+        "steps": 1,
+        "execution_time": 7.081031799316406e-05,
+        "final_precision": {
+          "abstract": 0.5,
+          "planning": 0.5,
+          "execution": 0.5
+        },
+        "tools_used": [
+          "shell_exec",
+          "file_read"
+        ],
+        "tool_stats": {
+          "shell_exec": {
+            "calls": 0,
+            "success_rate": 0.5
+          },
+          "file_read": {
+            "calls": 1,
+            "success_rate": 1.0
+          }
+        }
+      },
+      {
+        "success": true,
+        "steps": 1,
+        "execution_time": 0.00015974044799804688,
+        "final_precision": {
+          "abstract": 0.5,
+          "planning": 0.5,
+          "execution": 0.5
+        },
+        "tools_used": [
+          "shell_exec",
+          "file_read"
+        ],
+        "tool_stats": {
+          "shell_exec": {
+            "calls": 0,
+            "success_rate": 0.5
+          },
+          "file_read": {
+            "calls": 1,
+            "success_rate": 1.0
+          }
+        }
+      }
+    ]
+  },
+  "gaia": {
+    "success_rate": 0.6666666666666666,
+    "total_tasks": 3,
+    "successes": 2,
+    "failures": 1,
+    "avg_execution_time": 3.20275624593099e-05,
+    "final_precision": {
+      "abstract": 0.5,
+      "planning": 0.5,
+      "execution": 0.506276150627615
+    },
+    "all_results": [
+      {
+        "task_id": "task_1",
+        "success": false,
+        "execution_time": 5.0067901611328125e-05,
+        "difficulty": "easy",
+        "precision_update": 0.6
+      },
+      {
+        "task_id": "task_2",
+        "success": true,
+        "execution_time": 2.6226043701171875e-05,
+        "difficulty": "easy",
+        "precision_update": 0.1
+      },
+      {
+        "task_id": "task_3",
+        "success": true,
+        "execution_time": 1.9788742065429688e-05,
+        "difficulty": "medium",
+        "precision_update": 0.2
+      }
+    ]
+  }
+}

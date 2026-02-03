@@ -1,0 +1,170 @@
+{
+  "generated_at": 1769165887.5077755,
+  "total_benchmarks": 6,
+  "benchmarks": [
+    {
+      "task_id": "web_development_basic_1_1769165887",
+      "domain": "web_development",
+      "complexity": "basic",
+      "description": "Create a simple HTML/CSS webpage with responsive design",
+      "requirements": [
+        "Valid HTML5 structure",
+        "CSS styling with media queries",
+        "Responsive layout for mobile and desktop",
+        "Semantic HTML elements",
+        "Include at least 3 different HTML elements",
+        "Use CSS Grid or Flexbox"
+      ],
+      "evaluation_criteria": {
+        "validity": 0.3,
+        "responsiveness": 0.3,
+        "styling": 0.2,
+        "semantics": 0.2
+      },
+      "time_limit": 30.0,
+      "prerequisites": [
+        "Basic programming knowledge",
+        "Understanding of core concepts",
+        "HTML/CSS knowledge",
+        "JavaScript basics"
+      ]
+    },
+    {
+      "task_id": "web_development_basic_2_1769165887",
+      "domain": "web_development",
+      "complexity": "basic",
+      "description": "Create a simple HTML/CSS webpage with responsive design",
+      "requirements": [
+        "Valid HTML5 structure",
+        "CSS styling with media queries",
+        "Responsive layout for mobile and desktop",
+        "Semantic HTML elements",
+        "Include at least 3 different HTML elements",
+        "Use CSS Grid or Flexbox"
+      ],
+      "evaluation_criteria": {
+        "validity": 0.3,
+        "responsiveness": 0.3,
+        "styling": 0.2,
+        "semantics": 0.2
+      },
+      "time_limit": 30.0,
+      "prerequisites": [
+        "Basic programming knowledge",
+        "Understanding of core concepts",
+        "HTML/CSS knowledge",
+        "JavaScript basics"
+      ]
+    },
+    {
+      "task_id": "data_science_basic_1_1769165887",
+      "domain": "data_science",
+      "complexity": "basic",
+      "description": "Perform basic data analysis on a CSV dataset",
+      "requirements": [
+        "Data loading and cleaning",
+        "Basic statistical analysis",
+        "Data visualization",
+        "Summary report generation",
+        "Handle missing data appropriately",
+        "Generate at least 3 different charts"
+      ],
+      "evaluation_criteria": {
+        "data_cleaning": 0.3,
+        "analysis": 0.3,
+        "visualization": 0.2,
+        "reporting": 0.2
+      },
+      "time_limit": 45.0,
+      "prerequisites": [
+        "Basic programming knowledge",
+        "Understanding of core concepts",
+        "Python/R programming",
+        "Statistics knowledge"
+      ]
+    },
+    {
+      "task_id": "data_science_basic_2_1769165887",
+      "domain": "data_science",
+      "complexity": "basic",
+      "description": "Perform basic data analysis on a CSV dataset",
+      "requirements": [
+        "Data loading and cleaning",
+        "Basic statistical analysis",
+        "Data visualization",
+        "Summary report generation",
+        "Handle missing data appropriately",
+        "Generate at least 3 different charts"
+      ],
+      "evaluation_criteria": {
+        "data_cleaning": 0.3,
+        "analysis": 0.3,
+        "visualization": 0.2,
+        "reporting": 0.2
+      },
+      "time_limit": 45.0,
+      "prerequisites": [
+        "Basic programming knowledge",
+        "Understanding of core concepts",
+        "Python/R programming",
+        "Statistics knowledge"
+      ]
+    },
+    {
+      "task_id": "api_development_basic_1_1769165887",
+      "domain": "api_development",
+      "complexity": "basic",
+      "description": "Create a simple REST API endpoint",
+      "requirements": [
+        "HTTP endpoint implementation",
+        "Request/response handling",
+        "Basic error handling",
+        "API documentation",
+        "Support JSON request/response",
+        "Implement proper HTTP status codes"
+      ],
+      "evaluation_criteria": {
+        "endpoint_functionality": 0.4,
+        "request_handling": 0.3,
+        "error_handling": 0.2,
+        "documentation": 0.1
+      },
+      "time_limit": 25.0,
+      "prerequisites": [
+        "Basic programming knowledge",
+        "Understanding of core concepts",
+        "HTTP protocol knowledge",
+        "REST principles"
+      ]
+    },
+    {
+      "task_id": "api_development_intermediate_2_1769165887",
+      "domain": "api_development",
+      "complexity": "intermediate",
+      "description": "Build a REST API with CRUD operations and validation",
+      "requirements": [
+        "Complete CRUD operations",
+        "Input validation",
+        "Data serialization",
+        "Authentication middleware",
+        "Comprehensive error handling",
+        "Add request logging",
+        "Implement pagination for list endpoints"
+      ],
+      "evaluation_criteria": {
+        "crud_operations": 0.3,
+        "validation": 0.25,
+        "serialization": 0.2,
+        "authentication": 0.15,
+        "error_handling": 0.1
+      },
+      "time_limit": 75.0,
+      "prerequisites": [
+        "Intermediate programming skills",
+        "Familiarity with frameworks/libraries",
+        "HTTP protocol knowledge",
+        "REST principles"
+      ]
+    }
+  ]
+}

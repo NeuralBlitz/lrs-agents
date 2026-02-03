@@ -1,0 +1,48 @@
+{
+  "sample_tool_plugin": {
+    "metadata": {
+      "name": "sample_tool_plugin",
+      "version": "1.0.0",
+      "author": "Unknown",
+      "description": "Plugin sample_tool_plugin",
+      "license": "MIT",
+      "homepage": "",
+      "repository": "",
+      "dependencies": [],
+      "tags": [],
+      "min_opencode_version": "3.0.0",
+      "max_opencode_version": "",
+      "created_at": 1769169193.2528868,
+      "updated_at": 1769169193.252887
+    },
+    "path": "plugins/sample_tool_plugin.py",
+    "checksum": "17208095aed35913290178a2f0b80a5c4354dca7a2eddda843386b11c219b1fc",
+    "loaded": false,
+    "enabled": true,
+    "load_time": null,
+    "error_message": "No valid plugin class found"
+  },
+  "sample_lrs_plugin": {
+    "metadata": {
+      "name": "sample_lrs_plugin",
+      "version": "1.0.0",
+      "author": "Unknown",
+      "description": "Plugin sample_lrs_plugin",
+      "license": "MIT",
+      "homepage": "",
+      "repository": "",
+      "dependencies": [],
+      "tags": [],
+      "min_opencode_version": "3.0.0",
+      "max_opencode_version": "",
+      "created_at": 1769169193.2529202,
+      "updated_at": 1769169193.2529202
+    },
+    "path": "plugins/sample_lrs_plugin.py",
+    "checksum": "e4ce832ce0c631f931834938b17bfc489de21e6b18330840f77402fd553963f2",
+    "loaded": false,
+    "enabled": true,
+    "load_time": null,
+    "error_message": "No valid plugin class found"
+  }
+}

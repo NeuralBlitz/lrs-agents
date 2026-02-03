@@ -1,0 +1,344 @@
+{
+  "last_updated": 1769166071.5199704,
+  "total_results": 17,
+  "results": [
+    {
+      "test_id": "lrs_integration",
+      "test_name": "LRS Integration Test",
+      "category": "core",
+      "status": "pass",
+      "execution_time": 0.002736806869506836,
+      "timestamp": 1769166050.9008098,
+      "details": {
+        "status": "pass",
+        "performance_metrics": {
+          "initialization_time": 0.001,
+          "memory_usage": 1500000
+        }
+      },
+      "error_message": null,
+      "performance_metrics": {
+        "initialization_time": 0.001,
+        "memory_usage": 1500000
+      }
+    },
+    {
+      "test_id": "multi_agent_coordination",
+      "test_name": "Multi-Agent Coordination Test",
+      "category": "core",
+      "status": "pass",
+      "execution_time": 0.5169425010681152,
+      "timestamp": 1769166050.9039555,
+      "details": {
+        "status": "pass",
+        "performance_metrics": {
+          "coordination_time": 6.67572021484375e-06,
+          "agents_created": 5
+        }
+      },
+      "error_message": null,
+      "performance_metrics": {
+        "coordination_time": 6.67572021484375e-06,
+        "agents_created": 5
+      }
+    },
+    {
+      "test_id": "performance_optimization",
+      "test_name": "Performance Optimization Test",
+      "category": "performance",
+      "status": "pass",
+      "execution_time": 0.2974050045013428,
+      "timestamp": 1769166051.4211776,
+      "details": {
+        "status": "pass",
+        "performance_metrics": {
+          "analysis_time": 0.0005962848663330078,
+          "files_processed": 40,
+          "avg_complexity": 1.3716319995107378
+        }
+      },
+      "error_message": null,
+      "performance_metrics": {
+        "analysis_time": 0.0005962848663330078,
+        "files_processed": 40,
+        "avg_complexity": 1.3716319995107378
+      }
+    },
+    {
+      "test_id": "enterprise_security",
+      "test_name": "Enterprise Security Test",
+      "category": "security",
+      "status": "error",
+      "execution_time": 3.894456148147583,
+      "timestamp": 1769166051.718908,
+      "details": {
+        "status": "error",
+        "error": "cannot import name 'EnterpriseSecurityManager' from 'enterprise_security_monitoring' (/home/runner/workspace/enterprise_security_monitoring.py)"
+      },
+      "error_message": null,
+      "performance_metrics": {}
+    },
+    {
+      "test_id": "lrs_integration",
+      "test_name": "LRS Integration Test",
+      "category": "core",
+      "status": "pass",
+      "execution_time": 1.5020370483398438e-05,
+      "timestamp": 1769166055.6141968,
+      "details": {
+        "status": "pass",
+        "performance_metrics": {
+          "initialization_time": 0.001,
+          "memory_usage": 1500000
+        }
+      },
+      "error_message": null,
+      "performance_metrics": {
+        "initialization_time": 0.001,
+        "memory_usage": 1500000
+      }
+    },
+    {
+      "test_id": "multi_agent_coordination",
+      "test_name": "Multi-Agent Coordination Test",
+      "category": "core",
+      "status": "pass",
+      "execution_time": 0.00016069412231445312,
+      "timestamp": 1769166055.6166885,
+      "details": {
+        "status": "pass",
+        "performance_metrics": {
+          "coordination_time": 1.2636184692382812e-05,
+          "agents_created": 5
+        }
+      },
+      "error_message": null,
+      "performance_metrics": {
+        "coordination_time": 1.2636184692382812e-05,
+        "agents_created": 5
+      }
+    },
+    {
+      "test_id": "enterprise_security",
+      "test_name": "Enterprise Security Test",
+      "category": "security",
+      "status": "error",
+      "execution_time": 3.981590270996094e-05,
+      "timestamp": 1769166055.6181073,
+      "details": {
+        "status": "error",
+        "error": "cannot import name 'EnterpriseSecurityManager' from 'enterprise_security_monitoring' (/home/runner/workspace/enterprise_security_monitoring.py)"
+      },
+      "error_message": null,
+      "performance_metrics": {}
+    },
+    {
+      "test_id": "performance_optimization",
+      "test_name": "Performance Optimization Test",
+      "category": "performance",
+      "status": "pass",
+      "execution_time": 0.0019288063049316406,
+      "timestamp": 1769166055.6173239,
+      "details": {
+        "status": "pass",
+        "performance_metrics": {
+          "analysis_time": 0.0019207000732421875,
+          "files_processed": 40,
+          "avg_complexity": 1.3716319995107378
+        }
+      },
+      "error_message": null,
+      "performance_metrics": {
+        "analysis_time": 0.0019207000732421875,
+        "files_processed": 40,
+        "avg_complexity": 1.3716319995107378
+      }
+    },
+    {
+      "test_id": "lrs_integration",
+      "test_name": "LRS Integration Test",
+      "category": "core",
+      "status": "pass",
+      "execution_time": 1.3828277587890625e-05,
+      "timestamp": 1769166055.703976,
+      "details": {
+        "status": "pass",
+        "performance_metrics": {
+          "initialization_time": 0.001,
+          "memory_usage": 1500000
+        }
+      },
+      "error_message": null,
+      "performance_metrics": {
+        "initialization_time": 0.001,
+        "memory_usage": 1500000
+      }
+    },
+    {
+      "test_id": "multi_agent_coordination",
+      "test_name": "Multi-Agent Coordination Test",
+      "category": "core",
+      "status": "pass",
+      "execution_time": 0.00010609626770019531,
+      "timestamp": 1769166055.705016,
+      "details": {
+        "status": "pass",
+        "performance_metrics": {
+          "coordination_time": 6.198883056640625e-06,
+          "agents_created": 5
+        }
+      },
+      "error_message": null,
+      "performance_metrics": {
+        "coordination_time": 6.198883056640625e-06,
+        "agents_created": 5
+      }
+    },
+    {
+      "test_id": "performance_optimization",
+      "test_name": "Performance Optimization Test",
+      "category": "performance",
+      "status": "pass",
+      "execution_time": 0.0001621246337890625,
+      "timestamp": 1769166055.7149305,
+      "details": {
+        "status": "pass",
+        "performance_metrics": {
+          "analysis_time": 0.00015354156494140625,
+          "files_processed": 40,
+          "avg_complexity": 1.3716319995107378
+        }
+      },
+      "error_message": null,
+      "performance_metrics": {
+        "analysis_time": 0.00015354156494140625,
+        "files_processed": 40,
+        "avg_complexity": 1.3716319995107378
+      }
+    },
+    {
+      "test_id": "lrs_integration",
+      "test_name": "LRS Integration Test",
+      "category": "core",
+      "status": "pass",
+      "execution_time": 0.031973838806152344,
+      "timestamp": 1769166060.7492933,
+      "details": {
+        "status": "pass",
+        "performance_metrics": {
+          "initialization_time": 0.001,
+          "memory_usage": 1500000
+        }
+      },
+      "error_message": null,
+      "performance_metrics": {
+        "initialization_time": 0.001,
+        "memory_usage": 1500000
+      }
+    },
+    {
+      "test_id": "multi_agent_coordination",
+      "test_name": "Multi-Agent Coordination Test",
+      "category": "core",
+      "status": "pass",
+      "execution_time": 0.005134105682373047,
+      "timestamp": 1769166060.902887,
+      "details": {
+        "status": "pass",
+        "performance_metrics": {
+          "coordination_time": 2.002716064453125e-05,
+          "agents_created": 5
+        }
+      },
+      "error_message": null,
+      "performance_metrics": {
+        "coordination_time": 2.002716064453125e-05,
+        "agents_created": 5
+      }
+    },
+    {
+      "test_id": "performance_optimization",
+      "test_name": "Performance Optimization Test",
+      "category": "performance",
+      "status": "pass",
+      "execution_time": 0.09093832969665527,
+      "timestamp": 1769166060.9117146,
+      "details": {
+        "status": "pass",
+        "performance_metrics": {
+          "analysis_time": 0.0909261703491211,
+          "files_processed": 40,
+          "avg_complexity": 1.3716319995107378
+        }
+      },
+      "error_message": null,
+      "performance_metrics": {
+        "analysis_time": 0.0909261703491211,
+        "files_processed": 40,
+        "avg_complexity": 1.3716319995107378
+      }
+    },
+    {
+      "test_id": "lrs_integration",
+      "test_name": "LRS Integration Test",
+      "category": "core",
+      "status": "pass",
+      "execution_time": 0.04171347618103027,
+      "timestamp": 1769166066.057474,
+      "details": {
+        "status": "pass",
+        "performance_metrics": {
+          "initialization_time": 0.001,
+          "memory_usage": 1500000
+        }
+      },
+      "error_message": null,
+      "performance_metrics": {
+        "initialization_time": 0.001,
+        "memory_usage": 1500000
+      }
+    },
+    {
+      "test_id": "multi_agent_coordination",
+      "test_name": "Multi-Agent Coordination Test",
+      "category": "core",
+      "status": "pass",
+      "execution_time": 0.0049631595611572266,
+      "timestamp": 1769166067.534001,
+      "details": {
+        "status": "pass",
+        "performance_metrics": {
+          "coordination_time": 9.775161743164062e-06,
+          "agents_created": 5
+        }
+      },
+      "error_message": null,
+      "performance_metrics": {
+        "coordination_time": 9.775161743164062e-06,
+        "agents_created": 5
+      }
+    },
+    {
+      "test_id": "performance_optimization",
+      "test_name": "Performance Optimization Test",
+      "category": "performance",
+      "status": "pass",
+      "execution_time": 0.824171781539917,
+      "timestamp": 1769166067.604073,
+      "details": {
+        "status": "pass",
+        "performance_metrics": {
+          "analysis_time": 0.8241407871246338,
+          "files_processed": 40,
+          "avg_complexity": 1.3716319995107378
+        }
+      },
+      "error_message": null,
+      "performance_metrics": {
+        "analysis_time": 0.8241407871246338,
+        "files_processed": 40,
+        "avg_complexity": 1.3716319995107378
+      }
+    }
+  ]
+}

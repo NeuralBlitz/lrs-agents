@@ -1,0 +1,71 @@
+# TUI Integration Configuration
+
+# WebSocket Configuration
+websocket:
+  port: 8000
+  host: "0.0.0.0"
+  max_connections: 1000
+  ping_interval: 30
+  ping_timeout: 10
+  buffer_size: 1048576  # 1MB
+  enable_compression: true
+
+# REST API Configuration
+rest:
+  port: 8001
+  host: "0.0.0.0"
+  enable_cors: true
+  allowed_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8080"
+  rate_limit: 100  # requests per minute
+  enable_auth: false
+  api_key_header: "X-API-Key"
+
+# State Synchronization Configuration
+state_sync:
+  sync_interval: 1.0  # seconds
+  debounce_time: 0.1  # seconds
+  max_state_history: 1000
+  conflict_resolution: "tui_wins"  # tui_wins, lrs_wins, merge, timestamp
+  enable_persistence: true
+  persistence_path: "./data/tui_state.json"
+
+# Monitoring Configuration
+monitoring:
+  enable_metrics: true
+  metrics_interval: 60  # seconds
+  enable_tracing: false
+  log_level: "info"  # debug, info, warning, error, critical
+  enable_health_checks: true
+  health_check_interval: 30  # seconds
+
+# User Interface Configuration
+ui:
+  refresh_rate: 1000  # milliseconds
+  theme: "default"  # default, dark, light
+  language: "en"
+  timezone: "UTC"
+  enable_animations: true
+  auto_refresh: true
+
+# Agent Configuration
+agent:
+  default_tool_timeout: 30.0  # seconds
+  max_concurrent_tasks: 10
+  enable_tool_caching: true
+  cache_ttl: 300  # seconds
+  retry_attempts: 3
+  retry_delay: 1.0  # seconds
+
+# Global Settings
+debug: false
+environment: "development"  # development, staging, production
+version: "1.0.0"
+
+# Feature Flags
+enable_websockets: true
+enable_rest_api: true
+enable_state_mirroring: true
+enable_precision_mapping: true
+enable_multi_agent_coordination: true

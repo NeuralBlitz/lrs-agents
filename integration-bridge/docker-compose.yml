@@ -1,0 +1,195 @@
+version: '3.8'
+
+services:
+  # Integration Bridge Service
+  integration-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: opencode-lrs-bridge
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-9000}:9000"
+      - "${WS_PORT:-9001}:9001"
+      - "${METRICS_PORT:-9090}:9090"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - DEBUG=${DEBUG:-false}
+      - API_HOST=0.0.0.0
+      - API_PORT=9000
+      - WS_PORT=9001
+      - WORKERS=${WORKERS:-4}
+      
+      # Database Configuration
+      - DB_URL=${DB_URL:-postgresql://postgres:password@postgres:5432/integration_bridge}
+      - DB_POOL_SIZE=10
+      - DB_MAX_OVERFLOW=20
+      
+      # Redis Configuration
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - REDIS_MAX_CONNECTIONS=100
+      
+      # Security Configuration
+      - SECURITY_ENABLE_AUTH=${SECURITY_ENABLE_AUTH:-true}
+      - SECURITY_ENABLE_MTLS=${SECURITY_ENABLE_MTLS:-false}
+      - SECURITY_OAUTH_CLIENT_ID=${SECURITY_OAUTH_CLIENT_ID:-integration_bridge}
+      - SECURITY_OAUTH_CLIENT_SECRET=${SECURITY_OAUTH_CLIENT_SECRET:-secret}
+      - SECURITY_OAUTH_PROVIDER_URL=${SECURITY_OAUTH_PROVIDER_URL:-http://keycloak:8080/auth}
+      
+      # opencode Configuration
+      - OPENCODE_BASE_URL=${OPENCODE_BASE_URL:-http://opencode:8080}
+      - OPENCODE_API_KEY=${OPENCODE_API_KEY}
+      - OPENCODE_TIMEOUT=30
+      - OPENCODE_MAX_RETRIES=3
+      
+      # LRS Configuration
+      - LRS_BASE_URL=${LRS_BASE_URL:-http://lrs-agents:8000}
+      - LRS_TUI_BRIDGE_PORT=8000
+      - LRS_REST_PORT=8001
+      - LRS_TIMEOUT=30
+      - LRS_MAX_RETRIES=3
+      
+      # Rate Limiting
+      - RATE_LIMIT_REQUESTS_PER_MINUTE=${RATE_LIMIT_REQUESTS_PER_MINUTE:-1000}
+      - RATE_LIMIT_WEBSOCKET_CONNECTIONS=${RATE_LIMIT_WEBSOCKET_CONNECTIONS:-100}
+      
+      # Monitoring
+      - MONITORING_ENABLE_METRICS=${MONITORING_ENABLE_METRICS:-true}
+      - MONITORING_METRICS_PORT=9090
+      - MONITORING_ENABLE_LOGGING=${MONITORING_ENABLE_LOGGING:-true}
+      - MONITORING_LOG_LEVEL=${MONITORING_LOG_LEVEL:-INFO}
+    volumes:
+      - ./certs:/app/certs:ro
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - integration-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: integration-bridge-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-integration_bridge}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - integration-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-integration_bridge}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: integration-bridge-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis123}
+    volumes:
+      - redis_data:/data
+      - ./docker/redis/redis.conf:/etc/redis/redis.conf:ro
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - integration-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: integration-bridge-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9091}:9090"
+    networks:
+      - integration-network
+    profiles:
+      - monitoring
+
+  # Grafana Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: integration-bridge-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./docker/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    networks:
+      - integration-network
+    profiles:
+      - monitoring
+
+  # Nginx Reverse Proxy (Optional)
+  nginx:
+    image: nginx:alpine
+    container_name: integration-bridge-nginx
+    restart: unless-stopped
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    depends_on:
+      - integration-bridge
+    networks:
+      - integration-network
+    profiles:
+      - production
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  integration-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

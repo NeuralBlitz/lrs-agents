@@ -3,8 +3,7 @@ Tests for LangGraph integration.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock
-from lrs.core.free_energy import PolicyEvaluation
+from unittest.mock import Mock
 
 from lrs.integration.langgraph import LRSGraphBuilder, LRSState, create_lrs_agent
 from lrs.core.registry import ToolRegistry

@@ -13,10 +13,9 @@ import json
 import logging
 from typing import Dict, Any, List, Optional, Callable
 from datetime import datetime
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 import uvicorn
 
 from ..core.registry import ToolRegistry

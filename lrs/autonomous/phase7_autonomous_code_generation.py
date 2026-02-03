@@ -35,7 +35,7 @@ Integration with Existing Systems:
 import asyncio
 import json
 import re
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 import sys
@@ -965,7 +965,7 @@ EXPOSE 8000
 CMD ["python", "{req.name.lower()}.py"]
 '''
         elif req.language == ProgrammingLanguage.JAVASCRIPT:
-            return f"""FROM node:18-alpine
+            return """FROM node:18-alpine
 
 WORKDIR /app
 

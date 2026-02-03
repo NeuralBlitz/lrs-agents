@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 """OpenCode ToolLens for LRS-Agents integration."""
 
-import json
 import subprocess
-import sys
 from typing import Dict, Any, Optional
-from pathlib import Path
 
 from lrs.core.lens import ToolLens, ExecutionResult
-from lrs.core.free_energy import calculate_epistemic_value, calculate_pragmatic_value
 
 
 class OpenCodeTool(ToolLens):

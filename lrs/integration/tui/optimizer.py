@@ -7,18 +7,15 @@ and automated performance improvement for LRS agents using advanced ML technique
 
 import asyncio
 import numpy as np
-import json
-from typing import Dict, Any, List, Optional, Tuple, Callable
-from datetime import datetime, timedelta
+from typing import Dict, Any, List, Optional, Tuple
+from datetime import datetime
 from dataclasses import dataclass, field
 from enum import Enum
 import random
-from scipy import optimize
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 
 from ...multi_agent.shared_state import SharedWorldState
-from ...core.precision import PrecisionParameters
 
 
 class OptimizationType(Enum):
@@ -850,4 +847,3 @@ class AgentOptimizer:
 
 # Import required modules (would normally be at top)
 import logging
-import random

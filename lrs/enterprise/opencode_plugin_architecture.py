@@ -12,7 +12,7 @@ import inspect
 import json
 import os
 import sys
-from typing import Dict, List, Any, Optional, Callable, Type
+from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
 import hashlib

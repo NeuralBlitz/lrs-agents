@@ -8,7 +8,6 @@ Demonstrates cognitive architecture integration with multi-agent coordination sy
 
 import sys
 import os
-from pathlib import Path
 
 # Add current directory to path for imports
 sys.path.insert(0, os.path.dirname(__file__))

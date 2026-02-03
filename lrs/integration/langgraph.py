@@ -26,7 +26,7 @@ from lrs.core.free_energy import (
     precision_weighted_selection,
     PolicyEvaluation,
 )
-from lrs.core.lens import ToolLens, ExecutionResult
+from lrs.core.lens import ToolLens
 from lrs.core.registry import ToolRegistry
 
 

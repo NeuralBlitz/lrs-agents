@@ -7,7 +7,6 @@ Integrates Chaos Scriptorium and GAIA lightweight benchmarks.
 """
 
 import json
-import asyncio
 from typing import Dict, Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel

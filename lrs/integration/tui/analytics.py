@@ -7,12 +7,10 @@ and forecasting capabilities for LRS agents with real-time dashboards.
 
 import asyncio
 import numpy as np
-import pandas as pd
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from enum import Enum
-import json
 
 from ...multi_agent.shared_state import SharedWorldState
 from .precision_mapper import TUIPrecisionMapper

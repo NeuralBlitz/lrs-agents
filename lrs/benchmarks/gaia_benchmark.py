@@ -15,7 +15,6 @@ from pathlib import Path
 import time
 
 from lrs.core.lens import ToolLens, ExecutionResult
-from lrs.core.registry import ToolRegistry
 from lrs.monitoring.structured_logging import LRSLogger
 
 

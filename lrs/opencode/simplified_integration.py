@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 """Simplified OpenCode ↔ LRS-Agents Integration Demo (without numpy dependencies)."""
 
-import json
 import subprocess
-import sys
 from typing import Dict, Any, Optional
-import asyncio
 
 
 class SimplifiedToolLens:
@@ -143,7 +140,7 @@ class SimplifiedLRSAgent:
             result = tool.get(self.belief_state)
 
             if result["success"]:
-                print(f"✅ Tool succeeded")
+                print("✅ Tool succeeded")
                 self._update_precision(result["prediction_error"])
 
                 # Update belief state
@@ -233,7 +230,7 @@ def demo_bidirectional():
     for concept in concepts:
         print(f"🔗 {concept}")
 
-    print(f"\n💡 Benefits:")
+    print("\n💡 Benefits:")
     print("   • Active Inference for resilient task execution")
     print("   • Precision tracking and adaptation")
     print("   • Goal-directed behavior with epistemic exploration")

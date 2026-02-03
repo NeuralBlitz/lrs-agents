@@ -322,7 +322,7 @@ def create_lightweight_lrs_agent(tools: List, preferences: Optional[Dict] = None
                             "final_state": self.belief_state.copy(),
                         }
                     else:
-                        print(f"❌ Tool failed")
+                        print("❌ Tool failed")
                         self.precision.update("execution", 0.8)  # High error
 
                 except Exception as e:

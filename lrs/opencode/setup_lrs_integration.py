@@ -6,7 +6,6 @@ This module provides LRS-enhanced commands for OpenCode CLI.
 Run this to add LRS capabilities to your OpenCode installation.
 """
 
-import os
 import sys
 import subprocess
 from pathlib import Path

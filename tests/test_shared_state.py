@@ -3,7 +3,6 @@ Tests for shared world state.
 """
 
 import pytest
-import time
 from threading import Thread
 
 from lrs.multi_agent.shared_state import SharedWorldState

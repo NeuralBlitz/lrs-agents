@@ -8,7 +8,6 @@ and mesh communication capabilities for distributed LRS agent deployments.
 import asyncio
 import hashlib
 import json
-import socket
 import struct
 from typing import Dict, Any, List, Optional, Set, Tuple, Callable
 from datetime import datetime, timedelta
@@ -926,6 +925,4 @@ class DistributedMeshNetwork:
 # Import required modules (would normally be at top)
 import logging
 import asyncio
-import uuid
-import struct
 import numpy as np

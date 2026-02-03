@@ -6,22 +6,15 @@ including unit tests, integration tests, and performance benchmarks.
 """
 
 import pytest
-import asyncio
-import json
-from unittest.mock import Mock, AsyncMock, patch
-from datetime import datetime, timedelta
-from typing import Dict, Any
+from unittest.mock import Mock, AsyncMock
+from datetime import datetime
 
 # Import TUI integration components
-from ..bridge import TUIBridge, TUIConfig
 from ..tool import TUIInteractionTool
-from ..state_mirror import TUIStateMirror, ConflictResolution
-from ..websocket_manager import WebSocketManager, WebSocketConnection
-from ..rest_endpoints import RESTEndpoints
+from ..state_mirror import TUIStateMirror
 from ..precision_mapper import TUIPrecisionMapper, ConfidenceLevel
 from ..coordinator import TUIMultiAgentCoordinator, TUIAgentConfig
 from ..config import TUIConfigManager, TUIIntegrationConfig
-from ..plugins import TUIPluginManager, VisualizationPlugin, PluginMetadata, PluginType
 
 
 class TestTUIConfig:

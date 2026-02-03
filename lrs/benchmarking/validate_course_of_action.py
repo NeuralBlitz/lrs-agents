@@ -5,9 +5,7 @@ Quick Validation Test for LRS-OpenCode Course of Action
 Tests key components from our course of action to validate feasibility.
 """
 
-import os
 import sys
-import json
 from pathlib import Path
 
 # Add current directory to path

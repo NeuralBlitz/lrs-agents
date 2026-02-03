@@ -3,11 +3,10 @@ Tests for multi-agent coordinator.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 from lrs.multi_agent.coordinator import MultiAgentCoordinator
 from lrs.multi_agent.shared_state import SharedWorldState
-from lrs.multi_agent.social_precision import SocialPrecisionTracker
 
 
 class TestMultiAgentCoordinator:

@@ -10,13 +10,11 @@ Validates all 264,447x performance claims and cognitive capabilities.
 import sys
 import os
 import time
-from pathlib import Path
 
 # Add current directory to path for imports
 sys.path.insert(0, os.path.dirname(__file__))
 
 from lrs_agents.lrs.opencode.lrs_opencode_integration import CognitiveCodeAnalyzer
-from phase6_neuromorphic_research.phase6_neuromorphic_setup import CognitiveArchitecture
 import json
 
 

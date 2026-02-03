@@ -5,7 +5,7 @@ Generates precision-adaptive prompts that guide LLMs to produce
 diverse policy proposals appropriate to the agent's epistemic state.
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from dataclasses import dataclass
 from enum import Enum
 

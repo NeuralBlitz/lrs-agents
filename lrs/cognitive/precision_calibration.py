@@ -12,7 +12,6 @@ import math
 import time
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
-from pathlib import Path
 
 # Import our lightweight LRS components
 from lrs_agents.lrs.opencode.lightweight_lrs import LightweightHierarchicalPrecision

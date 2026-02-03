@@ -1,18 +1,12 @@
 """Hybrid Expected Free Energy evaluation."""
 
-from dataclasses import dataclass  # Add this
-from typing import List, Dict, Any, Optional, Tuple
-import json
+from typing import List, Dict, Any, Optional
 
-from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage
 
-from lrs.core.lens import ToolLens
 from lrs.core.free_energy import (
     calculate_expected_free_energy,
     PolicyEvaluation
 )
-from lrs.core.precision import PrecisionParameters
 
 class HybridGEvaluator:
     """

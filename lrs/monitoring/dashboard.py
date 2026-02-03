@@ -11,10 +11,8 @@ Provides visualization of:
 
 import streamlit as st
 import matplotlib.pyplot as plt
-import seaborn as sns
 import pandas as pd
-import numpy as np
-from typing import Optional, List, Dict, Any
+from typing import Optional
 from datetime import datetime
 
 from lrs.monitoring.tracker import LRSStateTracker

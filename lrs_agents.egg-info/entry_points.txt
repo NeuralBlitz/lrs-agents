@@ -1,0 +1,3 @@
+[console_scripts]
+lrs = lrs.cli:main
+lrs-agents = lrs.cli:main

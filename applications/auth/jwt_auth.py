@@ -229,9 +229,7 @@ class TokenGenerator:
 
         return jwt.encode(payload, signing_key, algorithm=self.ALGORITHM)
 
-    def generate_token_pair(
-        self, user_id: str, username: str, scopes: List[str]
-    ) -> Dict[str, str]:
+    def generate_token_pair(self, user_id: str, username: str, scopes: List[str]) -> Dict[str, str]:
         """Generate both access and refresh tokens"""
         return {
             "access_token": self.generate_access_token(user_id, username, scopes),
@@ -396,9 +394,7 @@ class JWTAuthenticator:
         self._users[user_id] = {"user": user, "password_hash": password_hash}
         return user
 
-    def authenticate(
-        self, username: str, password: str, grant_type: str = "password"
-    ) -> tuple:
+    def authenticate(self, username: str, password: str, grant_type: str = "password") -> tuple:
         """
         Authenticate a user and return tokens
 
@@ -495,56 +491,97 @@ class JWTAuthenticator:
         return self._token_validator.get_token_payload(token)
 
 
-def require_auth(f):
-    """Flask decorator to require JWT authentication"""
+def require_auth(f=None, *, required_scopes: List[str] = None):
+    """Flask decorator to require JWT authentication.
 
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        auth_header = request.headers.get("Authorization")
+    Can be used as:
+        @require_auth
+        def my_view():
+            ...
 
-        if not auth_header:
-            return jsonify(
-                {
-                    "error": "missing_authorization_header",
-                    "message": "Authorization header is required",
-                }
-            ), 401
+    Or with scope requirements:
+        @require_auth(required_scopes=["read", "metrics"])
+        def my_view():
+            ...
+    """
+    if f is not None:
+        # Used as @require_auth without parentheses
+        @wraps(f)
+        def decorated_no_scopes(*args, **kwargs):
+            return _verify_and_call(f, *args, **kwargs)
 
-        try:
-            scheme, token = auth_header.split(None, 1)
-        except ValueError:
-            return jsonify(
-                {
-                    "error": "invalid_authorization_header",
-                    "message": "Invalid authorization header format",
-                }
-            ), 401
+        return decorated_no_scopes
+    else:
+        # Used as @require_auth() or @require_auth(required_scopes=[...])
+        def decorator(func):
+            @wraps(func)
+            def decorated_with_scopes(*args, **kwargs):
+                if required_scopes:
+                    # First verify auth
+                    result = _verify_and_call(func, *args, **kwargs)
+                    if hasattr(g, "scopes") and not all(s in g.scopes for s in required_scopes):
+                        return jsonify(
+                            {
+                                "error": "insufficient_scope",
+                                "message": f"Required scopes: {required_scopes}",
+                                "required": required_scopes,
+                                "current": getattr(g, "scopes", []),
+                            }
+                        ), 403
+                    return result
+                else:
+                    return _verify_and_call(func, *args, **kwargs)
 
-        if scheme.lower() != "bearer":
-            return jsonify(
-                {
-                    "error": "invalid_authorization_scheme",
-                    "message": "Authorization scheme must be Bearer",
-                }
-            ), 401
+            return decorated_with_scopes
 
-        # Validate token
-        from applications.auth.jwt_auth import JWTAuthenticator
+        return decorator
 
-        authenticator = JWTAuthenticator()
-        success, payload, error = authenticator.validate_access_token(token)
 
-        if not success:
-            return jsonify({"error": "invalid_token", "message": error}), 401
+def _verify_and_call(f, *args, **kwargs):
+    """Internal function to verify token and call the decorated function"""
+    auth_header = request.headers.get("Authorization")
 
-        # Store user info in Flask's g object
-        g.current_user = payload.get("username")
-        g.user_id = payload.get("user_id")
-        g.scopes = payload.get("scopes", [])
+    if not auth_header:
+        return jsonify(
+            {
+                "error": "missing_authorization_header",
+                "message": "Authorization header is required",
+            }
+        ), 401
 
-        return f(*args, **kwargs)
+    try:
+        scheme, token = auth_header.split(None, 1)
+    except ValueError:
+        return jsonify(
+            {
+                "error": "invalid_authorization_header",
+                "message": "Invalid authorization header format",
+            }
+        ), 401
 
-    return decorated
+    if scheme.lower() != "bearer":
+        return jsonify(
+            {
+                "error": "invalid_authorization_scheme",
+                "message": "Authorization scheme must be Bearer",
+            }
+        ), 401
+
+    # Validate token
+    from applications.auth.jwt_auth import JWTAuthenticator
+
+    authenticator = JWTAuthenticator()
+    success, payload, error = authenticator.validate_access_token(token)
+
+    if not success:
+        return jsonify({"error": "invalid_token", "message": error}), 401
+
+    # Store user info in Flask's g object
+    g.current_user = payload.get("username")
+    g.user_id = payload.get("user_id")
+    g.scopes = payload.get("scopes", [])
+
+    return f(*args, **kwargs)
 
 
 def require_scope(required_scope: str):

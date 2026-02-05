@@ -140,53 +140,92 @@ def verify_token(token: str) -> Optional[Dict]:
         return None
 
 
-def require_auth(f):
-    """Decorator to require JWT authentication"""
+def require_auth(f=None, *, required_scopes: List[str] = None):
+    """Flask decorator to require JWT authentication.
 
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        auth_header = request.headers.get("Authorization")
+    Can be used as:
+        @require_auth
+        def my_view():
+            ...
 
-        if not auth_header:
-            return jsonify(
-                {
-                    "error": "missing_authorization_header",
-                    "message": "Authorization header is required",
-                }
-            ), 401
+    Or with scope requirements:
+        @require_auth(required_scopes=["read", "metrics"])
+        def my_view():
+            ...
+    """
+    if f is not None:
+        # Used as @require_auth without parentheses
+        @wraps(f)
+        def decorated_no_scopes(*args, **kwargs):
+            return _verify_and_call(f, *args, **kwargs)
 
-        try:
-            scheme, token = auth_header.split(None, 1)
-        except ValueError:
-            return jsonify(
-                {
-                    "error": "invalid_authorization_header",
-                    "message": "Invalid authorization header format",
-                }
-            ), 401
+        return decorated_no_scopes
+    else:
+        # Used as @require_auth() or @require_auth(required_scopes=[...])
+        def decorator(func):
+            @wraps(func)
+            def decorated_with_scopes(*args, **kwargs):
+                if required_scopes:
+                    # First verify auth
+                    result = _verify_and_call(func, *args, **kwargs)
+                    if hasattr(g, "scopes") and not all(s in g.scopes for s in required_scopes):
+                        return jsonify(
+                            {
+                                "error": "insufficient_scope",
+                                "message": f"Required scopes: {required_scopes}",
+                                "required": required_scopes,
+                                "current": getattr(g, "scopes", []),
+                            }
+                        ), 403
+                    return result
+                else:
+                    return _verify_and_call(func, *args, **kwargs)
 
-        if scheme.lower() != "bearer":
-            return jsonify(
-                {
-                    "error": "invalid_authorization_scheme",
-                    "message": "Authorization scheme must be Bearer",
-                }
-            ), 401
+            return decorated_with_scopes
 
-        payload = verify_token(token)
+        return decorator
 
-        if not payload:
-            return jsonify(
-                {"error": "invalid_token", "message": "Token is invalid or expired"}
-            ), 401
 
-        # Store user info in Flask's g object
-        g.current_user = payload.get("sub")
-        g.scopes = payload.get("scopes", [])
+def _verify_and_call(f, *args, **kwargs):
+    """Internal function to verify token and call the decorated function"""
+    auth_header = request.headers.get("Authorization")
 
-        return f(*args, **kwargs)
+    if not auth_header:
+        return jsonify(
+            {
+                "error": "missing_authorization_header",
+                "message": "Authorization header is required",
+            }
+        ), 401
 
-    return decorated
+    try:
+        scheme, token = auth_header.split(None, 1)
+    except ValueError:
+        return jsonify(
+            {
+                "error": "invalid_authorization_header",
+                "message": "Invalid authorization header format",
+            }
+        ), 401
+
+    if scheme.lower() != "bearer":
+        return jsonify(
+            {
+                "error": "invalid_authorization_scheme",
+                "message": "Authorization scheme must be Bearer",
+            }
+        ), 401
+
+    payload = verify_token(token)
+
+    if not payload:
+        return jsonify({"error": "invalid_token", "message": "Token is invalid or expired"}), 401
+
+    # Store user info in Flask's g object
+    g.current_user = payload.get("sub")
+    g.scopes = payload.get("scopes", [])
+
+    return f(*args, **kwargs)
 
 
 def require_scope(required_scope: str):
@@ -245,9 +284,7 @@ class NeuralBlitzAPI:
 
         # Initialize multi-reality network
         print("  🌌 Initializing Multi-Reality Network...")
-        self.reality_network = MultiRealityNeuralNetwork(
-            num_realities=4, nodes_per_reality=25
-        )
+        self.reality_network = MultiRealityNeuralNetwork(num_realities=4, nodes_per_reality=25)
 
         self.current_metrics.active_neurons = len(self.quantum_neurons)
         print(f"  ✅ System initialized with {len(self.quantum_neurons)} neurons")
@@ -278,9 +315,7 @@ class NeuralBlitzAPI:
                     np.mean(coherence_values) if coherence_values else 0.5
                 )
                 self.current_metrics.spike_rate = (
-                    total_spikes / len(self.quantum_neurons)
-                    if self.quantum_neurons
-                    else 0
+                    total_spikes / len(self.quantum_neurons) if self.quantum_neurons else 0
                 )
 
                 # Evolve reality network
@@ -313,9 +348,7 @@ class NeuralBlitzAPI:
     def start(self):
         """Start the background metrics thread"""
         self._running = True
-        self.metrics_thread = threading.Thread(
-            target=self.update_metrics_cycle, daemon=True
-        )
+        self.metrics_thread = threading.Thread(target=self.update_metrics_cycle, daemon=True)
         self.metrics_thread.start()
         print("  📊 Metrics collection started")
 
@@ -329,9 +362,7 @@ class NeuralBlitzAPI:
             return {
                 "timestamp": self.current_metrics.timestamp,
                 "quantum_coherence": round(self.current_metrics.quantum_coherence, 4),
-                "consciousness_level": round(
-                    self.current_metrics.consciousness_level, 4
-                ),
+                "consciousness_level": round(self.current_metrics.consciousness_level, 4),
                 "network_activity": round(self.current_metrics.network_activity, 4),
                 "reality_coherence": round(self.current_metrics.reality_coherence, 4),
                 "spike_rate": round(self.current_metrics.spike_rate, 2),
@@ -389,18 +420,10 @@ class NeuralBlitzAPI:
                 }
 
             return {
-                "global_consciousness": round(
-                    self.reality_network.global_consciousness, 4
-                ),
-                "cross_reality_coherence": round(
-                    self.reality_network.cross_reality_coherence, 4
-                ),
-                "information_flow_rate": round(
-                    self.reality_network.information_flow_rate, 4
-                ),
-                "reality_synchronization": round(
-                    self.reality_network.reality_synchronization, 4
-                ),
+                "global_consciousness": round(self.reality_network.global_consciousness, 4),
+                "cross_reality_coherence": round(self.reality_network.cross_reality_coherence, 4),
+                "information_flow_rate": round(self.reality_network.information_flow_rate, 4),
+                "reality_synchronization": round(self.reality_network.reality_synchronization, 4),
                 "realities": realities,
                 "active_signals": len(self.reality_network.active_signals),
             }
@@ -642,12 +665,8 @@ def evolve_reality_network():
         return jsonify(
             {
                 "cycles_completed": cycles,
-                "global_consciousness": round(
-                    api.reality_network.global_consciousness, 4
-                ),
-                "cross_reality_coherence": round(
-                    api.reality_network.cross_reality_coherence, 4
-                ),
+                "global_consciousness": round(api.reality_network.global_consciousness, 4),
+                "cross_reality_coherence": round(api.reality_network.cross_reality_coherence, 4),
                 "status": "success",
             }
         )

@@ -4,9 +4,9 @@ REST API endpoints for opencode ↔ LRS-Agents integration.
 
 import asyncio
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, HTTPException, Depends, Query, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, Query, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 import httpx
 import structlog
 from datetime import datetime
@@ -29,7 +29,13 @@ from ..models.schemas import (
     ToolExecutionStatus,
     AgentType,
 )
-from ..auth.middleware import AuthenticationMiddleware, require_permission
+from ..auth.middleware import (
+    AuthenticationMiddleware,
+    AuthenticationError,
+    AuthorizationError,
+    get_auth_middleware,
+    require_permission,
+)
 from fastapi import Depends
 
 logger = structlog.get_logger(__name__)
@@ -415,8 +421,17 @@ class IntegrationBridgeAPI:
 
         # Initialize components
         self.auth_middleware = AuthenticationMiddleware(config)
+        self.app.state.auth_middleware = self.auth_middleware
         self.agent_manager = AgentManager(config)
         self.tool_executor = ToolExecutor(config)
+
+        @self.app.exception_handler(AuthenticationError)
+        async def handle_authentication_error(request: Request, exc: AuthenticationError):
+            return JSONResponse(status_code=401, content={"detail": str(exc)})
+
+        @self.app.exception_handler(AuthorizationError)
+        async def handle_authorization_error(request: Request, exc: AuthorizationError):
+            return JSONResponse(status_code=403, content={"detail": str(exc)})
 
         # Setup routes
         self._setup_routes()
@@ -470,7 +485,7 @@ class IntegrationBridgeAPI:
         async def get_agent(
             agent_id: str,
             current_user: Dict[str, Any] = Depends(require_permission("read_state")),
-            auth_middleware: AuthenticationMiddleware = Depends(),
+            auth_middleware: AuthenticationMiddleware = Depends(get_auth_middleware),
         ):
             """Get agent details."""
             # Check additional permission for specific agent

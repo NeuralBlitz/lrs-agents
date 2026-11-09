@@ -6,6 +6,30 @@ Tests the JWT authentication system with the Flask test client
 
 import sys
 import os
+import json
+
+from werkzeug.security import generate_password_hash
+
+# Isolated test-only authentication configuration; never reused by deployment.
+os.environ["FLASK_ENV"] = "testing"
+os.environ["JWT_SECRET"] = "neuralblitz-v50-test-only-signing-key"
+os.environ["ENABLE_DEMO_AUTH"] = "true"
+os.environ["NEURALBLITZ_DEMO_USERS_JSON"] = json.dumps(
+    {
+        "admin": {
+            "password_hash": generate_password_hash("admin-test-password"),
+            "scopes": ["read", "write", "execute", "admin", "metrics"],
+        },
+        "operator": {
+            "password_hash": generate_password_hash("operator-test-password"),
+            "scopes": ["read", "write", "execute", "metrics"],
+        },
+        "viewer": {
+            "password_hash": generate_password_hash("viewer-test-password"),
+            "scopes": ["read"],
+        },
+    }
+)
 
 sys.path.insert(0, os.path.dirname(__file__))
 

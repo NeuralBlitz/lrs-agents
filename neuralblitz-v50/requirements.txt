@@ -1,6 +1,7 @@
 # NeuralBlitz v50 Production Dependencies
 
 # Web Framework
+# Socket.IO pins below are kept compatible with the Engine.IO 4.x API.
 flask==3.1.3
 flask-cors==6.0.0
 flask-sock==0.6.0

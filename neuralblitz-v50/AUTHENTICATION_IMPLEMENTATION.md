@@ -6,7 +6,7 @@
 
 The API no longer embeds a reusable JWT signing key or default demo passwords in source. Production startup now requires a deployment-provided `JWT_SECRET`. Demo identities are optional, configured using password hashes, and disabled in production. The repository must not contain TLS private keys.
 
-A TLS private key was previously tracked in the public repository under `nginx/ssl/`. The remediation branch removes the tracked certificate pair and adds ignore rules, but this does **not** remove copies from Git history or invalidate the exposed key. Treat the old key as compromised and replace it at the TLS termination point. Historical secret removal requires a separately planned history rewrite.
+The prior TLS private key and source-embedded JWT signing key were both present in the public repository. The remediation branch removes their current source copies and adds ignore rules, but this does **not** remove historical copies or invalidate credentials already issued with the old JWT key. Treat both values as compromised: replace the TLS certificate/key pair at the TLS termination point, set a new deployment-managed `JWT_SECRET`, and invalidate existing JWTs. Historical secret removal requires a separately planned history rewrite.
 
 ## 1. JWT configuration
 

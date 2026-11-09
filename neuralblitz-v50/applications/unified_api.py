@@ -25,7 +25,9 @@ Frontend Integration:
 """
 
 import sys
+import os
 import json
+import secrets
 import time
 import threading
 import asyncio
@@ -33,8 +35,10 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from functools import wraps
-from flask import Flask, jsonify, request, g
+from flask import Flask, jsonify, request, g, Response
 from flask_cors import CORS
+from prometheus_client import Gauge, generate_latest, CONTENT_TYPE_LATEST
+from werkzeug.security import check_password_hash
 import logging
 
 # Setup paths
@@ -53,34 +57,65 @@ from multi_reality_nn import MultiRealityNeuralNetwork
 # Initialize Flask app
 app = Flask(__name__)
 
-# JWT Authentication Setup
-JWT_SECRET = None  # removed from public history
+# JWT authentication fails closed in production. Development receives a
+# process-local random key unless a test/developer key is explicitly supplied.
+JWT_SECRET = os.environ.get("JWT_SECRET")
+if not JWT_SECRET:
+    if os.environ.get("FLASK_ENV", "").lower() == "production":
+        raise RuntimeError("JWT_SECRET must be configured in production")
+    JWT_SECRET = secrets.token_urlsafe(48)
+
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION = 3600  # 1 hour
 
-# Demo users (in production, use a proper database)
-DEMO_USERS = {
-    "admin": {
-        "password": "__REMOVED_INSECURE_DEFAULT__",
-        "scopes": ["read", "write", "execute", "admin", "metrics"],
-    },
-    "operator": {
-        "password": "__REMOVED_INSECURE_DEFAULT__",
-        "scopes": ["read", "write", "execute", "metrics"],
-    },
-    "viewer": {"password": "__REMOVED_INSECURE_DEFAULT__", "scopes": ["read"]},
-}
+
+def _load_demo_users() -> Dict[str, Dict[str, Any]]:
+    """Load optional demo identities from environment-provided password hashes."""
+    raw_users = os.environ.get("NEURALBLITZ_DEMO_USERS_JSON", "").strip()
+    if not raw_users:
+        return {}
+
+    try:
+        users = json.loads(raw_users)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("NEURALBLITZ_DEMO_USERS_JSON must contain valid JSON") from exc
+
+    if not isinstance(users, dict):
+        raise RuntimeError("NEURALBLITZ_DEMO_USERS_JSON must be a JSON object")
+
+    for username, user in users.items():
+        if (
+            not isinstance(username, str)
+            or not isinstance(user, dict)
+            or not isinstance(user.get("password_hash"), str)
+            or not isinstance(user.get("scopes"), list)
+        ):
+            raise RuntimeError(
+                "Each demo user must contain a password_hash string and scopes array"
+            )
+    return users
+
+
+DEMO_USERS = _load_demo_users()
+DEMO_AUTH_ENABLED = (
+    os.environ.get("ENABLE_DEMO_AUTH", "false").lower() in {"1", "true", "yes"}
+    and os.environ.get("FLASK_ENV", "").lower() != "production"
+)
 
 # CORS Configuration
+cors_origins = [
+    origin.strip()
+    for origin in os.environ.get(
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://localhost:5173,http://localhost:8080",
+    ).split(",")
+    if origin.strip()
+]
 CORS(
     app,
     resources={
         r"/api/*": {
-            "origins": [
-                "http://localhost:3000",
-                "http://localhost:5173",
-                "http://localhost:8080",
-            ],
+            "origins": cors_origins,
             "methods": ["GET", "POST", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization"],
         }
@@ -432,6 +467,26 @@ class NeuralBlitzAPI:
 # Create global API instance
 api = NeuralBlitzAPI()
 
+# Prometheus metrics are exposed on the private container network at /metrics.
+PROMETHEUS_GAUGES = {
+    "quantum_coherence": Gauge(
+        "neuralblitz_quantum_coherence", "Current quantum coherence"
+    ),
+    "consciousness_level": Gauge(
+        "neuralblitz_consciousness_level", "Current consciousness level"
+    ),
+    "network_activity": Gauge(
+        "neuralblitz_network_activity", "Current network activity"
+    ),
+    "reality_coherence": Gauge(
+        "neuralblitz_reality_coherence", "Current reality coherence"
+    ),
+    "spike_rate": Gauge("neuralblitz_spike_rate", "Current spike rate"),
+    "free_energy": Gauge("neuralblitz_free_energy", "Current free energy"),
+    "active_neurons": Gauge("neuralblitz_active_neurons", "Number of active neurons"),
+    "total_cycles": Gauge("neuralblitz_total_cycles", "Total processing cycles"),
+}
+
 
 # ==================== AUTHENTICATION ROUTES ====================
 
@@ -468,7 +523,7 @@ def get_token():
 
     # Verify credentials
     user = DEMO_USERS.get(username)
-    if not user or user["password"] != password:
+    if not user or not check_password_hash(user["password_hash"], password):
         return jsonify(
             {
                 "error": "invalid_grant",
@@ -484,34 +539,17 @@ def get_token():
 
 @app.route("/api/v1/auth/demo", methods=["GET"])
 def get_demo_credentials():
-    """
-    Get demo credentials for testing
-    WARNING: Only for development/testing!
-    """
+    """Describe configured demo identities in non-production environments."""
+    if not DEMO_AUTH_ENABLED:
+        return jsonify({"error": "not_found"}), 404
+
     return jsonify(
         {
-            "message": "Demo credentials for testing",
+            "message": "Demo authentication is enabled for this non-production instance.",
             "users": [
-                {
-                    "username": "admin",
-                    "password": "__REMOVED_INSECURE_DEFAULT__",
-                    "roles": ["admin"],
-                    "scopes": ["read", "write", "execute", "admin", "metrics"],
-                },
-                {
-                    "username": "operator",
-                    "password": "__REMOVED_INSECURE_DEFAULT__",
-                    "roles": ["operator"],
-                    "scopes": ["read", "write", "execute", "metrics"],
-                },
-                {
-                    "username": "viewer",
-                    "password": "__REMOVED_INSECURE_DEFAULT__",
-                    "roles": ["viewer"],
-                    "scopes": ["read"],
-                },
+                {"username": username, "scopes": user["scopes"]}
+                for username, user in DEMO_USERS.items()
             ],
-            "note": "These credentials are for testing only. Change in production!",
         }
     )
 
@@ -547,6 +585,15 @@ def introspect_token():
 
 
 # ==================== API ROUTES ====================
+
+
+@app.route("/metrics", methods=["GET"])
+def prometheus_metrics():
+    """Expose aggregate operational metrics for the private Prometheus network."""
+    values = api.get_current_metrics()
+    for metric_name, gauge in PROMETHEUS_GAUGES.items():
+        gauge.set(float(values.get(metric_name, 0)))
+    return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
 
 @app.route("/api/v1/health", methods=["GET"])
@@ -715,8 +762,6 @@ def get_dashboard_data():
 # ==================== INITIALIZATION ====================
 
 # Initialize API for Gunicorn (production)
-import os
-
 if os.environ.get("FLASK_ENV") == "production":
     print("🚀 Initializing NeuralBlitz v50 API (Production Mode)")
     api.initialize()

@@ -6,6 +6,30 @@ Tests the JWT authentication system with the Flask test client
 
 import sys
 import os
+import json
+
+from werkzeug.security import generate_password_hash
+
+# Isolated test-only authentication configuration; never reused by deployment.
+os.environ["FLASK_ENV"] = "testing"
+os.environ["JWT_SECRET"] = "neuralblitz-v50-test-only-signing-key"
+os.environ["ENABLE_DEMO_AUTH"] = "true"
+os.environ["NEURALBLITZ_DEMO_USERS_JSON"] = json.dumps(
+    {
+        "admin": {
+            "password_hash": generate_password_hash("admin-test-password"),
+            "scopes": ["read", "write", "execute", "admin", "metrics"],
+        },
+        "operator": {
+            "password_hash": generate_password_hash("operator-test-password"),
+            "scopes": ["read", "write", "execute", "metrics"],
+        },
+        "viewer": {
+            "password_hash": generate_password_hash("viewer-test-password"),
+            "scopes": ["read"],
+        },
+    }
+)
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -25,13 +49,13 @@ def test_authentication():
         # Get tokens
         response = client.post(
             "/api/v1/auth/token",
-            data={"username": "admin", "password": "__REMOVED_INSECURE_DEFAULT__", "grant_type": "password"},
+            data={"username": "admin", "password": "admin-test-password", "grant_type": "password"},
         )
         admin_token = response.json.get("access_token", "")
 
         response = client.post(
             "/api/v1/auth/token",
-            data={"username": "viewer", "password": "__REMOVED_INSECURE_DEFAULT__", "grant_type": "password"},
+            data={"username": "viewer", "password": "viewer-test-password", "grant_type": "password"},
         )
         viewer_token = response.json.get("access_token", "")
 
@@ -108,8 +132,13 @@ def test_authentication():
         # Test 7: Demo credentials endpoint
         print("\n7. Testing demo credentials endpoint...")
         response = client.get("/api/v1/auth/demo")
-        if response.status_code == 200 and "users" in response.json:
-            print("   ✅ PASS: Demo credentials endpoint works")
+        if (
+            response.status_code == 200
+            and "users" in response.json
+            and all("password" not in user and "password_hash" not in user
+                    for user in response.json["users"])
+        ):
+            print("   ✅ PASS: Demo identity metadata is returned without credentials")
             passed += 1
         else:
             print(f"   ❌ FAIL: Demo credentials endpoint failed (status: {response.status_code})")
@@ -206,6 +235,16 @@ def test_authentication():
                 failed += 1
         else:
             print("   ⏭ SKIP: No viewer token available")
+            failed += 1
+
+        # Test 14: Prometheus exposition endpoint
+        print("\\n14. Testing Prometheus metrics exposition...")
+        response = client.get("/metrics")
+        if response.status_code == 200 and "neuralblitz_quantum_coherence" in response.text:
+            print("   ✅ PASS: Prometheus metrics endpoint works")
+            passed += 1
+        else:
+            print(f"   ❌ FAIL: Prometheus metrics endpoint failed (status: {response.status_code})")
             failed += 1
 
     # Print summary

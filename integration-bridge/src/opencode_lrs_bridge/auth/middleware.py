@@ -199,19 +199,17 @@ class AuthenticationMiddleware:
         self.mtls_validator = MTLSValidator(config)
         self.security = HTTPBearer(auto_error=False)
 
-    async def authenticate_request(
-        self,
-        request: Request,
-        credentials: Optional[HTTPAuthorizationCredentials] = Depends(
-            HTTPBearer(auto_error=False)
-        ),
-    ) -> Dict[str, Any]:
-        """Authenticate incoming request."""
+    async def authenticate_request(self, request: Request) -> Dict[str, Any]:
+        """Authenticate incoming request from the actual request headers."""
         # Validate mTLS even when application-level authentication is disabled.
         self.mtls_validator.validate_client_certificate(request)
 
         if not self.config.security.enable_auth:
             return {"user_id": "anonymous", "permissions": ["system_admin"]}
+
+        # Resolve the bearer token explicitly because this method is invoked
+        # from a dependency helper rather than registered as a FastAPI dependency.
+        credentials = await self.security(request)
 
         # Check for JWT token
         if credentials and credentials.scheme == "Bearer":

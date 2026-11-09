@@ -207,11 +207,11 @@ class AuthenticationMiddleware:
         ),
     ) -> Dict[str, Any]:
         """Authenticate incoming request."""
+        # Validate mTLS even when application-level authentication is disabled.
+        self.mtls_validator.validate_client_certificate(request)
+
         if not self.config.security.enable_auth:
             return {"user_id": "anonymous", "permissions": ["system_admin"]}
-
-        # Validate mTLS if enabled
-        self.mtls_validator.validate_client_certificate(request)
 
         # Check for JWT token
         if credentials and credentials.scheme == "Bearer":

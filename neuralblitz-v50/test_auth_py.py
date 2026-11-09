@@ -49,13 +49,13 @@ def test_authentication():
         # Get tokens
         response = client.post(
             "/api/v1/auth/token",
-            data={"username": "admin", "password": "__REMOVED_INSECURE_DEFAULT__", "grant_type": "password"},
+            data={"username": "admin", "password": "admin-test-password", "grant_type": "password"},
         )
         admin_token = response.json.get("access_token", "")
 
         response = client.post(
             "/api/v1/auth/token",
-            data={"username": "viewer", "password": "__REMOVED_INSECURE_DEFAULT__", "grant_type": "password"},
+            data={"username": "viewer", "password": "viewer-test-password", "grant_type": "password"},
         )
         viewer_token = response.json.get("access_token", "")
 

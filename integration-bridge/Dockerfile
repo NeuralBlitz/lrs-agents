@@ -37,4 +37,3 @@ ENV PYTHONPATH=/app/src
 ENV PYTHONUNBUFFERED=1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["--help"]

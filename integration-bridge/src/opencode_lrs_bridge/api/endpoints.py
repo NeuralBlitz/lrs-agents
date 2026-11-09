@@ -497,7 +497,7 @@ class IntegrationBridgeAPI:
             agent_id: str,
             request: AgentUpdateRequest,
             current_user: Dict[str, Any] = Depends(require_permission("write_state")),
-            auth_middleware: AuthenticationMiddleware = Depends(),
+            auth_middleware: AuthenticationMiddleware = Depends(get_auth_middleware),
         ):
             """Update agent state."""
             auth_middleware.authorize_action(current_user, "write_state", agent_id)
@@ -507,7 +507,7 @@ class IntegrationBridgeAPI:
         async def delete_agent(
             agent_id: str,
             current_user: Dict[str, Any] = Depends(require_permission("manage_agents")),
-            auth_middleware: AuthenticationMiddleware = Depends(),
+            auth_middleware: AuthenticationMiddleware = Depends(get_auth_middleware),
         ):
             """Delete agent."""
             auth_middleware.authorize_action(current_user, "manage_agents", agent_id)

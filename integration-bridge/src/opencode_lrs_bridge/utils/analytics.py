@@ -46,6 +46,7 @@ TOOL_EXECUTIONS_TOTAL = Counter(
     'Total number of tool executions',
     ['tool_name', 'system', 'status'],
     registry=REGISTRY
+)
 
 TOOL_EXECUTION_DURATION = Histogram(
     'tool_execution_duration_seconds',
@@ -283,6 +284,7 @@ class AnalyticsManager:
         self.anomaly_detector = AnomalyDetector(config)
         self.custom_metrics: Dict[str, Any] = {}
         self.is_collecting = False
+        self._metrics_task: Optional[asyncio.Task] = None
         
     async def track_event(
         self,
@@ -363,17 +365,18 @@ class AnalyticsManager:
         except Exception as e:
             logger.error("Failed to update Prometheus metrics", error=str(e))
     
-    async def start_metrics_collection(self):
+    async def start_metrics_collection(self) -> Optional[asyncio.Task]:
         """Start background metrics collection."""
         if not self.config.monitoring.enable_metrics:
-            return
+            return None
         
+        if self._metrics_task and not self._metrics_task.done():
+            return self._metrics_task
+
         self.is_collecting = True
-        
-        # Start periodic aggregation and anomaly detection
-        asyncio.create_task(self._metrics_collection_loop())
-        
+        self._metrics_task = asyncio.create_task(self._metrics_collection_loop())
         logger.info("Analytics metrics collection started")
+        return self._metrics_task
     
     async def _metrics_collection_loop(self):
         """Background loop for metrics collection and anomaly detection."""
@@ -388,6 +391,8 @@ class AnalyticsManager:
                 # Wait before next collection
                 await asyncio.sleep(60)  # Collect every minute
                 
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 logger.error("Error in metrics collection loop", error=str(e))
                 await asyncio.sleep(60)
@@ -497,4 +502,6 @@ class AnalyticsManager:
     def stop_metrics_collection(self):
         """Stop metrics collection."""
         self.is_collecting = False
+        if self._metrics_task and not self._metrics_task.done():
+            self._metrics_task.cancel()
         logger.info("Analytics metrics collection stopped")

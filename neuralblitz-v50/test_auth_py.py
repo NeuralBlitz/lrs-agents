@@ -132,8 +132,13 @@ def test_authentication():
         # Test 7: Demo credentials endpoint
         print("\n7. Testing demo credentials endpoint...")
         response = client.get("/api/v1/auth/demo")
-        if response.status_code == 200 and "users" in response.json:
-            print("   ✅ PASS: Demo credentials endpoint works")
+        if (
+            response.status_code == 200
+            and "users" in response.json
+            and all("password" not in user and "password_hash" not in user
+                    for user in response.json["users"])
+        ):
+            print("   ✅ PASS: Demo identity metadata is returned without credentials")
             passed += 1
         else:
             print(f"   ❌ FAIL: Demo credentials endpoint failed (status: {response.status_code})")

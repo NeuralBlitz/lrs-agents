@@ -207,6 +207,9 @@ class AuthenticationMiddleware:
         ),
     ) -> Dict[str, Any]:
         """Authenticate incoming request."""
+        if not self.config.security.enable_auth:
+            return {"user_id": "anonymous", "permissions": ["system_admin"]}
+
         # Validate mTLS if enabled
         self.mtls_validator.validate_client_certificate(request)
 
@@ -276,13 +279,16 @@ class AuthenticationMiddleware:
         raise AuthorizationError("Insufficient permissions")
 
 
+def get_auth_middleware(request: Request) -> AuthenticationMiddleware:
+    """Resolve the single configured middleware instance from application state."""
+    return request.app.state.auth_middleware
+
+
 def get_current_user():
     """FastAPI dependency to get current authenticated user."""
 
-    async def dependency(
-        request: Request,
-        auth_middleware: AuthenticationMiddleware = Depends(),
-    ):
+    async def dependency(request: Request):
+        auth_middleware = get_auth_middleware(request)
         return await auth_middleware.authenticate_request(request)
 
     return dependency
@@ -291,10 +297,8 @@ def get_current_user():
 def require_permission(permission: str, agent_id: Optional[str] = None):
     """FastAPI dependency to require specific permission."""
 
-    async def dependency(
-        request: Request,
-        auth_middleware: AuthenticationMiddleware = Depends(),
-    ):
+    async def dependency(request: Request):
+        auth_middleware = get_auth_middleware(request)
         current_user = await auth_middleware.authenticate_request(request)
         auth_middleware.authorize_action(current_user, permission, agent_id)
         return current_user

@@ -1,0 +1,100 @@
+name: NeuralBlitz v50
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "neuralblitz-v50/**"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "nginx.conf"
+      - "prometheus.yml"
+      - ".gitignore"
+      - ".github/workflows/neuralblitz-v50.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "neuralblitz-v50/**"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "nginx.conf"
+      - "prometheus.yml"
+      - ".gitignore"
+      - ".github/workflows/neuralblitz-v50.yml"
+
+jobs:
+  test-and-deployment-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: neuralblitz-v50/requirements.txt
+
+      - name: Install NeuralBlitz v50 dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r neuralblitz-v50/requirements.txt
+
+      - name: Run authentication regression tests
+        run: python neuralblitz-v50/test_auth_py.py
+
+      - name: Run production security configuration tests
+        run: pytest -q neuralblitz-v50/test_security_config.py
+
+      - name: Validate Compose configuration
+        env:
+          JWT_SECRET: ci-only-jwt-secret-not-for-deployment
+          GRAFANA_PASSWORD: ci-only-grafana-password
+        run: docker compose config --quiet
+
+      - name: Validate Nginx configuration
+        run: |
+          docker run --rm \
+            --volume "$PWD/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            nginx:alpine nginx -t
+
+      - name: Validate Prometheus configuration
+        run: |
+          docker run --rm \
+            --volume "$PWD/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
+            prom/prometheus:latest \
+            promtool check config /etc/prometheus/prometheus.yml
+
+      - name: Build NeuralBlitz v50 API image
+        run: docker build --tag neuralblitz-v50:ci .
+
+      - name: Smoke test production container and metrics endpoint
+        shell: bash
+        env:
+          JWT_SECRET: ci-only-runtime-signing-key
+        run: |
+          set -euo pipefail
+          docker run --detach \
+            --name neuralblitz-v50-smoke \
+            --publish 127.0.0.1:5000:5000 \
+            --env FLASK_ENV=production \
+            --env JWT_SECRET="$JWT_SECRET" \
+            --env NB_WORKERS=1 \
+            neuralblitz-v50:ci
+
+          cleanup() {
+            docker logs neuralblitz-v50-smoke || true
+            docker rm --force neuralblitz-v50-smoke >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:5000/api/v1/health; then
+              break
+            fi
+            sleep 2
+          done
+
+          curl --fail --silent http://127.0.0.1:5000/api/v1/health
+          curl --fail --silent http://127.0.0.1:5000/metrics | grep -q neuralblitz_quantum_coherence

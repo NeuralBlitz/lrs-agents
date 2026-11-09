@@ -35,8 +35,9 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from functools import wraps
-from flask import Flask, jsonify, request, g
+from flask import Flask, jsonify, request, g, Response
 from flask_cors import CORS
+from prometheus_client import Gauge, generate_latest, CONTENT_TYPE_LATEST
 from werkzeug.security import check_password_hash
 import logging
 
@@ -102,15 +103,19 @@ DEMO_AUTH_ENABLED = (
 )
 
 # CORS Configuration
+cors_origins = [
+    origin.strip()
+    for origin in os.environ.get(
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://localhost:5173,http://localhost:8080",
+    ).split(",")
+    if origin.strip()
+]
 CORS(
     app,
     resources={
         r"/api/*": {
-            "origins": [
-                "http://localhost:3000",
-                "http://localhost:5173",
-                "http://localhost:8080",
-            ],
+            "origins": cors_origins,
             "methods": ["GET", "POST", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization"],
         }
@@ -462,6 +467,26 @@ class NeuralBlitzAPI:
 # Create global API instance
 api = NeuralBlitzAPI()
 
+# Prometheus metrics are exposed on the private container network at /metrics.
+PROMETHEUS_GAUGES = {
+    "quantum_coherence": Gauge(
+        "neuralblitz_quantum_coherence", "Current quantum coherence"
+    ),
+    "consciousness_level": Gauge(
+        "neuralblitz_consciousness_level", "Current consciousness level"
+    ),
+    "network_activity": Gauge(
+        "neuralblitz_network_activity", "Current network activity"
+    ),
+    "reality_coherence": Gauge(
+        "neuralblitz_reality_coherence", "Current reality coherence"
+    ),
+    "spike_rate": Gauge("neuralblitz_spike_rate", "Current spike rate"),
+    "free_energy": Gauge("neuralblitz_free_energy", "Current free energy"),
+    "active_neurons": Gauge("neuralblitz_active_neurons", "Number of active neurons"),
+    "total_cycles": Gauge("neuralblitz_total_cycles", "Total processing cycles"),
+}
+
 
 # ==================== AUTHENTICATION ROUTES ====================
 
@@ -560,6 +585,15 @@ def introspect_token():
 
 
 # ==================== API ROUTES ====================
+
+
+@app.route("/metrics", methods=["GET"])
+def prometheus_metrics():
+    """Expose aggregate operational metrics for the private Prometheus network."""
+    values = api.get_current_metrics()
+    for metric_name, gauge in PROMETHEUS_GAUGES.items():
+        gauge.set(float(values.get(metric_name, 0)))
+    return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
 
 @app.route("/api/v1/health", methods=["GET"])

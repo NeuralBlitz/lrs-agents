@@ -237,6 +237,16 @@ def test_authentication():
             print("   ⏭ SKIP: No viewer token available")
             failed += 1
 
+        # Test 14: Prometheus exposition endpoint
+        print("\\n14. Testing Prometheus metrics exposition...")
+        response = client.get("/metrics")
+        if response.status_code == 200 and "neuralblitz_quantum_coherence" in response.text:
+            print("   ✅ PASS: Prometheus metrics endpoint works")
+            passed += 1
+        else:
+            print(f"   ❌ FAIL: Prometheus metrics endpoint failed (status: {response.status_code})")
+            failed += 1
+
     # Print summary
     print("\n" + "=" * 50)
     print("TEST SUMMARY")

@@ -76,7 +76,7 @@ services:
       - "127.0.0.1:3001:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_PASSWORD:?Set GRAFANA_PASSWORD when enabling monitoring}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_PASSWORD:?Set GRAFANA_PASSWORD in the deployment environment}"
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 5s
     volumes:

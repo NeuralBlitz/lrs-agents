@@ -64,8 +64,8 @@ jobs:
         run: |
           docker run --rm \
             --volume "$PWD/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
-            prom/prometheus:latest \
-            promtool check config /etc/prometheus/prometheus.yml
+            --entrypoint promtool prom/prometheus:latest \
+            check config /etc/prometheus/prometheus.yml
 
       - name: Build NeuralBlitz v50 API image
         run: docker build --tag neuralblitz-v50:ci .

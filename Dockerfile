@@ -12,7 +12,9 @@ COPY neuralblitz-v50/requirements.txt /app/requirements.txt
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-COPY --chown=10001:10001 neuralblitz-v50/ /app/
+COPY --chown=10001:10001 neuralblitz-v50/applications/ /app/applications/
+COPY --chown=10001:10001 neuralblitz-v50/multi_reality_nn.py /app/
+COPY --chown=10001:10001 neuralblitz-v50/quantum_spiking_neuron.py /app/
 
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin app \
     && mkdir -p /app/logs /app/data \

@@ -6,6 +6,8 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, patch
 import json
+import httpx
+from fastapi import HTTPException
 
 from opencode_lrs_bridge.api.endpoints import IntegrationBridgeAPI
 from opencode_lrs_bridge.models.schemas import (
@@ -314,26 +316,26 @@ class TestAPIErrorHandling(IntegrationTestCase):
         self.bridge_api = IntegrationBridgeAPI(self.config)
         self.client = TestClient(self.bridge_api.app)
 
+    @pytest.mark.asyncio
     @patch("opencode_lrs_bridge.api.endpoints.httpx.AsyncClient")
-    def test_external_service_error(self, mock_client_class):
-        """Test handling of external service errors."""
-        # Setup mock to raise exception
+    async def test_external_service_error(self, mock_client_class):
+        """Test that LRS registration errors are translated to HTTP 500."""
         mock_client = AsyncMock()
-        mock_client_class.return_value = mock_client
-        mock_client.post.side_effect = Exception("Service unavailable")
+        mock_client.post.side_effect = httpx.ConnectError("Service unavailable")
+        mock_client_class.return_value.__aenter__.return_value = mock_client
 
-        request_data = {
-            "agent_id": "test_agent_001",
-            "agent_type": "hybrid",
-            "config": {},
-            "tools": [],
-        }
+        request = AgentCreateRequest(
+            agent_id="test_agent_001",
+            agent_type=AgentType.HYBRID,
+            config={},
+            tools=[],
+        )
 
-        response = self.client.post("/agents", json=request_data)
+        with pytest.raises(HTTPException) as error:
+            await self.bridge_api.agent_manager._register_with_lrs(request)
 
-        assert response.status_code == 500
-        data = response.json()
-        assert "Failed to register with LRS" in data["detail"]
+        assert error.value.status_code == 500
+        assert "Failed to register with LRS" in error.value.detail
 
     def test_invalid_json_payload(self):
         """Test handling of invalid JSON payload."""

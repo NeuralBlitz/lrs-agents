@@ -1,3 +1,20 @@
+# Repository Audit Addendum — 9 November 2026
+
+The original report below records historical project claims and test results; it is not current proof that this repository can be deployed safely. A subsequent source audit found that the root Compose file referenced a missing root Dockerfile and Nginx configuration, while the public repository contained a TLS private key and the API source contained a fixed JWT signing key and default demo passwords.
+
+A remediation branch now:
+- Adds a root Dockerfile that builds the NeuralBlitz v50 Flask API from the nested requirements and source tree.
+- Aligns root Compose paths, binds management ports to localhost, removes the missing TLS-file mount, requires runtime JWT and Grafana secrets, and configures Nginx as an HTTP reverse proxy behind an external TLS ingress.
+- Adds an internal Prometheus exposition endpoint and changes the scrape path to the Prometheus format.
+- Removes the hardcoded JWT signing key and built-in demo passwords; production now fails closed without `JWT_SECRET`, and demo identities use configured password hashes in non-production only.
+- Removes the tracked TLS certificate pair from the current branch and adds ignore rules.
+
+**Important residual security action:** the formerly tracked TLS private key remains present in historical Git commits. Treat it as compromised and replace the certificate/key pair at the actual TLS termination point. Removing files from the branch does not rotate the key or erase Git history. A history rewrite and deployment secret rotation are not part of this code change.
+
+The remediation branch has not yet completed its container build, Compose validation, or runtime smoke tests. Do not treat the fixes as production-verified until those checks pass and the TLS replacement is complete.
+
+---
+
 # NeuralBlitz v50 Production Deployment Report
 
 **Date:** February 5, 2026

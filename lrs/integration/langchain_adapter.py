@@ -131,7 +131,7 @@ class LangChainToolLens(ToolLens):
                         success=False,
                         value=None,
                         error=f"Timeout after {self.timeout}s",
-                        prediction_error=0.7
+                        prediction_error=0.9
                     )
                 
                 if result_container['error']:
@@ -173,7 +173,7 @@ class LangChainToolLens(ToolLens):
                 success=False,
                 value=None,
                 error=str(e),
-                prediction_error=0.7
+                prediction_error=0.9
             )
         
         except Exception as e:

@@ -130,14 +130,11 @@ class ChaosEnvironment:
 
     def _set_permissions(self, readable: bool):
         """Set file permissions"""
-        if readable:
-            # Make readable
-            os.chmod(self.vault_dir, 0o755)
-            os.chmod(self.key_path, 0o644)
-        else:
-            # Make locked (no read permission)
-            os.chmod(self.vault_dir, 0o000)
-            os.chmod(self.key_path, 0o000)
+        # Keep the containing directory searchable so that tests and cleanup
+        # can reach the key even after a simulated lock. Restrict access to
+        # the key itself; FileReadTool also enforces the locked state.
+        os.chmod(self.vault_dir, 0o755)
+        os.chmod(self.key_path, 0o644 if readable else 0o000)
 
     def is_locked(self) -> bool:
         """Check if files are currently locked"""

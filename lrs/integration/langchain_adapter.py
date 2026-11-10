@@ -99,7 +99,7 @@ class LangChainToolLens(ToolLens):
         )
         if requires_positional:
             return self.tool.run(state)
-        return self._invoke_tool(state)
+        return self.tool.run(**state)
 
     def get(self, state: Dict[str, Any]) -> ExecutionResult:
         """Execute LangChain tool with timeout."""

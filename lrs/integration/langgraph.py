@@ -204,7 +204,9 @@ class LRSGraphBuilder:
         state["current_hbn_level"] = "planning"
         precision = state.get("precision") or self.hp.get_all()
         max_depth = 2 if precision["planning"] > 0.6 else 3
-        candidates = self._generate_intelligent_candidates(max_depth=max_depth, state=state)
+        # Use the implemented bounded candidate enumerator; the previous
+        # intelligent-generator method was referenced but never defined.
+        candidates = self._generate_policy_candidates(max_depth=max_depth)
 
         state["candidate_policies"] = candidates
 

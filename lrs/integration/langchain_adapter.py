@@ -19,7 +19,8 @@ def _extract_input_schema(tool: BaseTool) -> Dict[str, Any]:
         except AttributeError:
             # Fall back to Pydantic V1
             return tool.args_schema.schema()
-    return {}
+    # A tool without an args_schema still accepts one generic input argument.
+    return {"type": "object", "properties": {"input": {"type": "string"}}}
 
 
 def _extract_output_schema(tool: BaseTool) -> Dict[str, Any]:
@@ -170,7 +171,7 @@ class LangChainToolLens(ToolLens):
         """Update state with tool result."""
         return {
             **state,
-            f'{self.name}_result': obs
+            f'{self.name}_output': obs
         }
 
 

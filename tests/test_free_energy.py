@@ -87,7 +87,7 @@ class TestPragmaticValue:
 
         historical_stats = {"reliable_tool": {"success_rate": 0.9}}
 
-        pragmatic = calculate_pragmatic_value(policy, {}, preferences, historical_stats)
+        pragmatic = calculate_pragmatic_value(policy, preferences, historical_stats=historical_stats)
 
         assert pragmatic > 0  # Positive expected reward
 
@@ -103,7 +103,7 @@ class TestPragmaticValue:
             }
         }
 
-        pragmatic = calculate_pragmatic_value(policy, {}, preferences, historical_stats)
+        pragmatic = calculate_pragmatic_value(policy, preferences, historical_stats=historical_stats)
 
         assert pragmatic < 0  # Negative expected reward
 
@@ -115,7 +115,7 @@ class TestPragmaticValue:
         historical_stats = {f"tool_{i}": {"success_rate": 1.0} for i in range(5)}
 
         pragmatic = calculate_pragmatic_value(
-            policy, {}, preferences, historical_stats, discount_factor=0.9
+            policy, preferences, historical_stats=historical_stats, discount_factor=0.9
         )
 
         # Should be less than 5 steps * 5.0 reward due to discounting
@@ -145,7 +145,7 @@ class TestPragmaticValue:
 
         historical_stats = {"tool": {"success_rate": 1.0}}
 
-        pragmatic = calculate_pragmatic_value(policy, {}, preferences, historical_stats)
+        pragmatic = calculate_pragmatic_value(policy, preferences, historical_stats=historical_stats)
 
         # Should include step cost
         assert pragmatic < 5.0
@@ -160,7 +160,7 @@ class TestExpectedFreeEnergy:
         preferences = {"success": 5.0}
 
         epistemic = calculate_epistemic_value(policy, {}, None)
-        pragmatic = calculate_pragmatic_value(policy, {}, preferences, None)
+        pragmatic = calculate_pragmatic_value(policy, preferences)
 
         G = calculate_expected_free_energy(policy, {}, preferences, precision=0.0)
 

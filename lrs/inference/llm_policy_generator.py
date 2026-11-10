@@ -177,13 +177,11 @@ class LLMPolicyGenerator:
             tools = []
             for tool_name in proposal.tool_sequence:
                 tool = self.registry.get_tool(tool_name)
-                if tool:
-                    tools.append(tool)
-                else:
-                    # Create a mock tool if not found
-                    mock_tool = MagicMock()
-                    mock_tool.name = tool_name
-                    tools.append(mock_tool)
+                if tool is None:
+                    # Reject hallucinated tool names; never synthesize executables.
+                    tools = []
+                    break
+                tools.append(tool)
 
             if tools:  # Only include if we found valid tools
                 policies.append(
@@ -282,7 +280,8 @@ class LLMPolicyGenerator:
     def _create_fallback_proposals(self, num_proposals: int) -> List[Dict[str, Any]]:
         """Create simple fallback proposals when LLM parsing fails."""
         proposals = []
-        tools = list(self.registry.tools)[:num_proposals]
+        registered = self.registry.tools
+        tools = list(registered.values() if isinstance(registered, dict) else registered)[:num_proposals]
 
         for i, tool in enumerate(tools):
             tool_name = tool.name if hasattr(tool, "name") else str(tool)

@@ -193,13 +193,20 @@ class LRSGraphBuilder:
 
         return state
 
+    def _initialize(self, state: LRSState) -> LRSState:
+        """Backward-compatible alias for initialization used by integrations."""
+        return self._initialize_state(state)
+
     def _generate_policies(self, state: LRSState) -> LRSState:
         """
         Generate optimized candidate policies using intelligent generation.
         """
         state["current_hbn_level"] = "planning"
-        max_depth = 2 if state["precision"]["planning"] > 0.6 else 3
-        candidates = self._generate_intelligent_candidates(max_depth=max_depth, state=state)
+        precision = state.get("precision") or self.hp.get_all()
+        max_depth = 2 if precision["planning"] > 0.6 else 3
+        # Use the implemented bounded candidate enumerator; the previous
+        # intelligent-generator method was referenced but never defined.
+        candidates = self._generate_policy_candidates(max_depth=max_depth)
 
         state["candidate_policies"] = candidates
 
@@ -235,9 +242,13 @@ class LRSGraphBuilder:
         """
         evaluations = []
 
-        for policy in state["candidate_policies"]:
+        for candidate in state["candidate_policies"]:
+            # Historical callers may supply metadata-wrapped policies.
+            policy = candidate["policy"] if isinstance(candidate, dict) else candidate
             eval_result = calculate_expected_free_energy(
-                policy=policy, registry=self.registry, preferences=state["preferences"]
+                policy=policy,
+                registry=self.registry,
+                preferences=state.get("preferences", self.preferences),
             )
             evaluations.append(
                 PolicyEvaluation(
@@ -250,8 +261,13 @@ class LRSGraphBuilder:
             )
 
         state["policy_evaluations"] = evaluations
+        state["G_values"] = {i: evaluation.total_G for i, evaluation in enumerate(evaluations)}
 
         return state
+
+    def _evaluate_G(self, state: LRSState) -> LRSState:
+        """Backward-compatible alias for free-energy evaluation."""
+        return self._evaluate_free_energy(state)
 
     def _select_policy(self, state: LRSState) -> LRSState:
         """
@@ -261,10 +277,12 @@ class LRSGraphBuilder:
         Low precision → explore (flatten distribution)
         """
         selected_idx = precision_weighted_selection(
-            evaluations=state["policy_evaluations"], precision=state["precision"]["planning"]
+            state["policy_evaluations"],
+            precision=state.get("precision", self.hp.get_all())["planning"],
         )
 
-        selected_policy = state["candidate_policies"][selected_idx]
+        candidate = state["candidate_policies"][selected_idx]
+        selected_policy = candidate["policy"] if isinstance(candidate, dict) else candidate
         state["selected_policy"] = selected_policy
         state["current_policy_index"] = 0  # Reset for execution
 
@@ -327,14 +345,16 @@ class LRSGraphBuilder:
         # Update hierarchical precision
         updated_precisions = self.hp.update(level="execution", prediction_error=prediction_error)
 
-        # Sync to state
-        state["precision"].update(updated_precisions)
-        state["precision_history"].append(self.hp.get_all())
+        # HierarchicalPrecision.update may mutate in place and return None.
+        state.setdefault("precision", self.hp.get_all()).update(
+            updated_precisions if isinstance(updated_precisions, dict) else self.hp.get_all()
+        )
+        state.setdefault("precision_history", []).append(self.hp.get_all())
 
         # Record adaptation events
         if prediction_error > 0.7:
-            state["adaptation_count"] += 1
-            state["adaptation_events"].append(
+            state["adaptation_count"] = state.get("adaptation_count", 0) + 1
+            state.setdefault("adaptation_events", []).append(
                 {
                     "timestamp": datetime.now().isoformat(),
                     "tool": latest_execution["tool"],
@@ -380,20 +400,28 @@ class LRSGraphBuilder:
             return "success"
 
         # Check for systemic failure (all levels have very low precision)
-        if all(p < 0.2 for p in state["precision"].values()):
+        precision = state.get("precision") or self.hp.get_all()
+        if precision and all(p < 0.2 for p in precision.values()):
             return "fail"
 
         # Check if current policy is exhausted
-        if state["current_policy_index"] >= len(state.get("selected_policy", [])):
+        if state.get("current_policy_index", 0) >= len(state.get("selected_policy", [])):
             # Policy done but goal not satisfied → replan
             return "replan"
 
         # Check if precision collapsed (adaptation needed)
-        if state["precision"]["planning"] < 0.4:
+        if precision["planning"] < 0.4:
             return "replan"
 
         # Continue with current policy
         return "continue"
+
+    def _precision_gate(self, state: LRSState) -> str:
+        """Compatibility gate for legacy callers enforcing a maximum iteration budget."""
+        max_iterations = state.get("max_iterations", 50)
+        if len(state.get("tool_history", [])) >= max_iterations:
+            return "end"
+        return self._decision_gate(state)
 
 
 # ============================================================================

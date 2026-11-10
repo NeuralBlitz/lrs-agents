@@ -265,6 +265,12 @@ def precision_weighted_selection(
     # Softmax with precision as inverse temperature
     if temperature <= 0:
         raise ValueError("temperature must be positive")
+
+    # High confidence should consistently exploit the best known policy.
+    # Keep stochastic exploration for lower precision or higher temperature.
+    if precision >= 0.9 and temperature <= 1.0:
+        return min(range(len(evaluations)), key=lambda i: evaluations[i].total_G)
+
     beta = precision / temperature
     # Shift logits before exponentiation to prevent overflow for large rewards.
     logits = [-beta * G for G in G_values]

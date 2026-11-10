@@ -53,12 +53,25 @@ jobs:
         pip install ruff black
     
     - name: Run ruff
+      id: ruff
       run: ruff check lrs tests
       continue-on-error: true
     
     - name: Run black
+      id: black
       run: black --check lrs tests
       continue-on-error: true
+
+    - name: Record lint baseline
+      if: always()
+      env:
+        RUFF_OUTCOME: ${{ steps.ruff.outcome }}
+        BLACK_OUTCOME: ${{ steps.black.outcome }}
+      run: |
+        echo '## Non-blocking lint baseline' >> "$GITHUB_STEP_SUMMARY"
+        echo "- Ruff: ${RUFF_OUTCOME}" >> "$GITHUB_STEP_SUMMARY"
+        echo "- Black: ${BLACK_OUTCOME}" >> "$GITHUB_STEP_SUMMARY"
+        echo 'Lint failures remain non-blocking until the baseline is remediated.' >> "$GITHUB_STEP_SUMMARY"
 
   docs:
     runs-on: ubuntu-latest

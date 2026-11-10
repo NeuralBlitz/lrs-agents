@@ -103,17 +103,23 @@ def calculate_pragmatic_value(
     reward_error = preferences.get("error", -1.0)
     step_cost = preferences.get("step_cost", -0.1)
 
+    if not 0.0 <= discount_factor <= 1.0:
+        raise ValueError("discount_factor must be between 0 and 1")
+
     pragmatic = 0.0
-    discount_factor = 1.0
+    discount_weight = 1.0
 
     for tool in policy:
-        p_success = tool.success_rate if hasattr(tool, "success_rate") else 0.5
+        tool_name = getattr(tool, "name", None)
+        stats = (historical_stats or {}).get(tool_name, {})
+        p_success = stats.get("success_rate", getattr(tool, "success_rate", 0.5))
+        p_success = max(0.0, min(1.0, float(p_success)))
 
         # Expected reward for this step
         expected_reward = p_success * reward_success + (1 - p_success) * reward_error + step_cost
 
-        pragmatic += discount_factor * expected_reward
-        discount_factor *= discount_factor
+        pragmatic += discount_weight * expected_reward
+        discount_weight *= discount_factor
 
     return pragmatic
 
@@ -207,7 +213,12 @@ def evaluate_policy(
         pragmatic_value=pragmatic,
         total_G=total_G,
         expected_success_prob=expected_success_prob,
-        components={"epistemic": epistemic, "pragmatic": pragmatic, "policy_length": len(policy)},
+        components={
+            "epistemic": epistemic,
+            "pragmatic": pragmatic,
+            "policy_length": len(policy),
+            "tool_names": [getattr(tool, "name", str(tool)) for tool in policy],
+        },
     )
 
 
@@ -242,7 +253,8 @@ def precision_weighted_selection(
     import random
 
     # Use evaluations parameter if provided (for backward compatibility)
-    evaluations = evaluations or policy_evaluations
+    if evaluations is None:
+        evaluations = policy_evaluations
 
     if not evaluations:
         raise ValueError("Cannot select from empty evaluations")
@@ -251,8 +263,13 @@ def precision_weighted_selection(
     G_values = [eval.total_G for eval in evaluations]
 
     # Softmax with precision as inverse temperature
+    if temperature <= 0:
+        raise ValueError("temperature must be positive")
     beta = precision / temperature
-    exp_values = [math.exp(-beta * G) for G in G_values]
+    # Shift logits before exponentiation to prevent overflow for large rewards.
+    logits = [-beta * G for G in G_values]
+    max_logit = max(logits)
+    exp_values = [math.exp(value - max_logit) for value in logits]
     total = sum(exp_values)
 
     probabilities = [e / total for e in exp_values]

@@ -194,8 +194,10 @@ def analyze_chaos_performance(chaos_results: Dict[str, Any]) -> Dict[str, Any]:
         "precision_stability": statistics.stdev(precision_evolution)
         if len(precision_evolution) > 1
         else 0,
-        "adaptation_effectiveness": sum(r.get("adaptations", 0) for r in all_results)
-        / len(all_results),
+        "adaptation_effectiveness": (
+            sum(r.get("adaptations", 0) for r in all_results) / len(all_results)
+            if all_results else 0.0
+        ),
     }
 
     return metrics

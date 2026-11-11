@@ -128,7 +128,7 @@ def run_comprehensive_benchmark_suite(num_trials: int = 50) -> Dict[str, Any]:
 
     results["calibration_analysis"] = calibration_analysis
 
-    print("📈 Calibration Effectiveness:")
+    print("📈 Illustrative calibration assumptions (not measured):")
     print(f"   Domains Calibrated: {calibration_analysis['calibrated_domains']}")
     print(
         f"   Performance Improvement: {calibration_analysis['performance_improvement']:.1%}"
@@ -151,13 +151,13 @@ def run_comprehensive_benchmark_suite(num_trials: int = 50) -> Dict[str, Any]:
     # Final Report
     print("🎉 COMPREHENSIVE BENCHMARK SUITE COMPLETE")
     print("=" * 48)
-    print("✅ Chaos Scriptorium: Resilience testing completed")
-    print("✅ GAIA Benchmark: Multi-step reasoning validated")
-    print("✅ Performance Optimization: <5s target achieved")
-    print("✅ Precision Calibration: Domain-specific tuning working")
-    print("✅ Phase 2 Optimization: All objectives met")
-    print()
-    print("🚀 Ready to proceed to Phase 3: Production Deployment")
+    print("Chaos Scriptorium and GAIA benchmark runs completed")
+    print(f"Code analysis <5s target: {'met' if perf_results['target_achievement'] else 'not met'}")
+    phase2_targets = overall_analysis["phase2_targets_met"]
+    for name, met in phase2_targets.items():
+        print(f"Phase 2 {name}: {'met' if met else 'not met'}")
+    print("Calibration values are illustrative placeholders, not experiment results.")
+    print("Production readiness requires independent security, deployment and performance review.")
     print("=" * 55)
 
     return results
@@ -333,6 +333,8 @@ def analyze_calibration_effectiveness() -> Dict[str, Any]:
     adaptation_efficiency = 0.82
 
     return {
+        "measured": False,
+        "provenance": "illustrative_placeholder",
         "calibrated_domains": calibrated_domains,
         "performance_improvement": performance_improvement,
         "adaptation_efficiency": adaptation_efficiency,

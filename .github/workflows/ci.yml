@@ -33,7 +33,7 @@ jobs:
     
     - name: Run tests
       run: |
-        pytest tests/ -v --cov=lrs --cov-report=xml --cov-report=term-missing --cov-fail-under=15
+        pytest tests/ -v --cov=lrs --cov-report=xml --cov-report=term-missing --cov-fail-under=18
     
     - name: Upload coverage
       uses: codecov/codecov-action@v4

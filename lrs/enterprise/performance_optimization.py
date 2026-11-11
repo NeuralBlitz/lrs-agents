@@ -17,13 +17,34 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Import our components
 from lrs.opencode.lrs_opencode_integration import ActiveInferenceAnalyzer
 
+# Cache entries are disposable and may be present inside user-supplied codebases.
+# Never allow pickle globals to instantiate arbitrary classes or functions.
+_MAX_CACHE_BYTES = 16 * 1024 * 1024
+
+
+class _RestrictedCacheUnpickler(pickle.Unpickler):
+    """Load primitive Python data only; refuse GLOBAL/STACK_GLOBAL opcodes."""
+
+    def find_class(self, module: str, name: str):
+        raise pickle.UnpicklingError("Global object references are not allowed in caches")
+
+
+def _load_cache_value(stream):
+    if os.fstat(stream.fileno()).st_size > _MAX_CACHE_BYTES:
+        raise ValueError("Cache entry exceeds permitted size")
+    return _RestrictedCacheUnpickler(stream).load()
+
+
+
 
 class LRSCache:
     """Intelligent caching system for LRS operations."""
 
     def __init__(self, cache_dir: str = ".lrs_cache", max_size: int = 1000):
+        if max_size < 1:
+            raise ValueError("max_size must be positive")
         self.cache_dir = Path(cache_dir)
-        self.cache_dir.mkdir(exist_ok=True)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.max_size = max_size
         self._cache_index: Dict[str, Dict[str, Any]] = {}
         self._load_cache_index()
@@ -34,8 +55,15 @@ class LRSCache:
         if index_file.exists():
             try:
                 with open(index_file, "rb") as f:
-                    self._cache_index = pickle.load(f)
-            except:
+                    loaded = _load_cache_value(f)
+                if not isinstance(loaded, dict) or not all(
+                    isinstance(k, str) and isinstance(v, dict)
+                    and isinstance(v.get("timestamp"), (int, float))
+                    for k, v in loaded.items()
+                ):
+                    raise ValueError("Malformed cache index")
+                self._cache_index = loaded
+            except (OSError, EOFError, ValueError, TypeError, pickle.UnpicklingError):
                 self._cache_index = {}
 
     def _save_cache_index(self):
@@ -65,9 +93,9 @@ class LRSCache:
                 if time.time() - cache_entry["timestamp"] < 86400:
                     try:
                         with open(cache_file, "rb") as f:
-                            return pickle.load(f)
-                    except:
-                        pass  # Cache corrupted, will be overwritten
+                            return _load_cache_value(f)
+                    except (OSError, EOFError, ValueError, TypeError, pickle.UnpicklingError):
+                        pass  # Invalidate untrusted or corrupted cached values.
 
         return None
 
@@ -101,7 +129,8 @@ class LRSCache:
         # Sort by timestamp and remove oldest 10%
         entries = sorted(self._cache_index.items(), key=lambda x: x[1]["timestamp"])
 
-        to_remove = len(entries) // 10
+        # Always evict at least one item, including with small max_size.
+        to_remove = max(1, len(entries) // 10)
         for cache_key, _ in entries[:to_remove]:
             cache_file = self.cache_dir / f"{cache_key}.pkl"
             cache_file.unlink(missing_ok=True)

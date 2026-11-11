@@ -52,6 +52,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install ruff black
     
+    - name: Enforce critical Python correctness rules
+      # Existing style debt is tracked separately. These rules should remain blocking.
+      run: ruff check lrs tests --select E9,F821,F822,F823
+
     - name: Run ruff
       id: ruff
       run: ruff check lrs tests

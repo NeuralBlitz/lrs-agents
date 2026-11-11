@@ -94,8 +94,8 @@ class OpenCodeLRSBridge:
 
                 return {"status": "success", "agent_id": agent_id}
 
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+            except Exception as error:
+                raise HTTPException(status_code=500, detail="Agent operation failed") from error
 
         @app.post("/lrs/execute", dependencies=[Depends(require_bridge_authorization)])
         async def execute_lrs_task(request: LRSRequest):
@@ -112,8 +112,8 @@ class OpenCodeLRSBridge:
                     }
                 )
                 return {"result": result}
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+            except Exception as error:
+                raise HTTPException(status_code=500, detail="Agent operation failed") from error
 
         @app.post("/opencode/execute", dependencies=[Depends(require_bridge_authorization)])
         async def execute_opencode_command(request: OpenCodeRequest):
@@ -230,12 +230,12 @@ class OpenCodeToolLens(ToolLens):
                     error=f"Bridge API error: {response.status_code}",
                 )
 
-        except Exception as e:
+        except Exception:
             return ExecutionResult(
                 success=False,
                 value=None,
                 prediction_error=0.9,
-                error=f"OpenCode tool error: {str(e)}",
+                error="OpenCode bridge request failed",
             )
 
     def _belief_state_to_command(self, belief_state: Dict[str, Any]) -> str:

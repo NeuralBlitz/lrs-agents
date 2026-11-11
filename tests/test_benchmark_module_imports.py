@@ -69,3 +69,10 @@ def test_json_serialize_helper_preserves_primitives():
         "ok": True,
         "values": [1, None],
     }
+
+
+def test_calibration_metrics_are_marked_as_illustrative():
+    runner = importlib.import_module("lrs.benchmarking.comprehensive_benchmark_runner")
+    estimates = runner.analyze_calibration_effectiveness()
+    assert estimates["measured"] is False
+    assert estimates["provenance"] == "illustrative_placeholder"

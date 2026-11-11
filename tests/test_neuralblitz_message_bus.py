@@ -183,3 +183,84 @@ async def test_start_stop_can_be_called_twice():
     await bus.stop()
     await bus.stop()
     assert bus.get_stats()["running"] is False
+
+
+@pytest.mark.asyncio
+async def test_queue_capacity_rejects_excess_without_false_delivery():
+    bus = UnifiedMessageBus(max_queue_size=1, max_history_size=2)
+    first = Message(source="first")
+    second = Message(source="second")
+
+    assert await bus.publish(first) is True
+    assert await bus.publish(second) is False
+
+    stats = bus.get_stats()
+    assert stats["messages_sent"] == 1
+    assert stats["messages_failed"] == 1
+    assert stats["queue_size"] == 1
+    assert stats["message_history_size"] == 1
+    assert stats["max_queue_size"] == 1
+    assert stats["max_history_size"] == 2
+    assert bus.get_message_history() == [first]
+
+
+@pytest.mark.asyncio
+async def test_message_history_retains_only_newest_events():
+    bus = UnifiedMessageBus(max_history_size=2)
+    messages = [Message(source=f"producer_{i}") for i in range(4)]
+    for message in messages:
+        assert await bus.publish(message) is True
+
+    assert bus.get_message_history() == messages[2:]
+    assert bus.get_stats()["message_history_size"] == 2
+    assert bus.get_stats()["messages_sent"] == 4
+
+
+@pytest.mark.asyncio
+async def test_republished_message_id_refreshes_history_order():
+    bus = UnifiedMessageBus(max_history_size=2)
+    first = Message(source="one")
+    second = Message(source="two")
+    updated = Message(id=first.id, source="one-again")
+    for message in (first, second, updated):
+        assert await bus.publish(message) is True
+
+    assert bus.get_message_history() == [second, updated]
+
+
+@pytest.mark.asyncio
+async def test_backpressure_recovers_once_queued_message_is_processed():
+    bus = UnifiedMessageBus(max_queue_size=1)
+    received = []
+
+    async def callback(message):
+        received.append(message.source)
+
+    await bus.subscribe(MessageType.HEARTBEAT, callback)
+    assert await bus.publish(Message(source="first")) is True
+    assert await bus.publish(Message(source="rejected")) is False
+
+    await bus.start()
+    try:
+        await asyncio.wait_for(bus._message_queue.join(), timeout=3)
+        assert await bus.publish(Message(source="second")) is True
+        await asyncio.wait_for(bus._message_queue.join(), timeout=3)
+    finally:
+        await bus.stop()
+
+    assert received == ["first", "second"]
+    assert bus.get_stats()["messages_failed"] == 1
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"max_queue_size": 0},
+        {"max_history_size": 0},
+        {"max_queue_size": -1},
+        {"max_history_size": -1},
+    ],
+)
+def test_invalid_bus_capacity_is_rejected(kwargs):
+    with pytest.raises(ValueError, match="capacities"):
+        UnifiedMessageBus(**kwargs)

@@ -78,7 +78,26 @@ def build_opencode_command(
     allowed = _READ_ONLY_SUBCOMMANDS | ({"bash"} if allow_shell else set())
     if args[0] not in allowed:
         raise ValueError("OpenCode subcommand is not permitted")
+    if args[0] == "ls" and len(args) != 1:
+        raise ValueError("ls does not accept bridge-supplied arguments")
+    if args[0] in {"read", "grep"}:
+        if len(args) != 2 or args[1].startswith("-"):
+            raise ValueError("read/grep require exactly one positional argument")
+    if args[0] == "question" and len(args) < 2:
+        raise ValueError("question requires nonempty text")
     return [executable, *args]
+
+
+
+def resolve_bridge_file(workspace: str, working_dir: str, filename: str) -> str:
+    """Confine file-read arguments to the same permitted workspace."""
+    base = Path(workspace).resolve()
+    target = (Path(working_dir) / filename).resolve()
+    if not target.is_relative_to(base):
+        raise ValueError("File path escapes configured workspace")
+    if not target.is_file():
+        raise ValueError("File path is not an existing regular file")
+    return str(target)
 
 
 def configured_workspace() -> str:

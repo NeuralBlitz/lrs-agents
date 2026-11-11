@@ -15,7 +15,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Import our components
-from lrs_agents.lrs.opencode.lrs_opencode_integration import ActiveInferenceAnalyzer
+from lrs.opencode.lrs_opencode_integration import ActiveInferenceAnalyzer
 
 
 class LRSCache:

@@ -31,7 +31,7 @@ jobs:
     
     - name: Run tests
       run: |
-        pytest tests/ -v --cov-fail-under=15
+        pytest tests/ -v --cov-fail-under=18
 
     - name: Install package and dependencies
       run: pip install ".[all]"

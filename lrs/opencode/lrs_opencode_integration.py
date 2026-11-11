@@ -1183,7 +1183,7 @@ def opencode_lrs_command(args: List[str]) -> str:
     try:
         if command == "analyze" and len(args) > 1:
             # Use optimized analyzer for better performance
-            from lrs_agents.lrs.enterprise.performance_optimization import OptimizedActiveInferenceAnalyzer
+            from lrs.enterprise.performance_optimization import OptimizedActiveInferenceAnalyzer
 
             analyzer = OptimizedActiveInferenceAnalyzer()
             result = analyzer.analyze_codebase(args[1])
@@ -1204,7 +1204,7 @@ def opencode_lrs_command(args: List[str]) -> str:
 
         elif command == "optimize" and len(args) > 1:
             # Dedicated optimized analysis command
-            from lrs_agents.lrs.enterprise.performance_optimization import run_optimized_analysis
+            from lrs.enterprise.performance_optimization import run_optimized_analysis
 
             result = run_optimized_analysis(args[1], use_cache=True)
 

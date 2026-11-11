@@ -110,7 +110,7 @@ class LightweightChaosEnvironment:
         """Remove temporary directory"""
         try:
             shutil.rmtree(self.root_dir)
-        except:
+        except OSError:
             pass
 
 
@@ -407,10 +407,10 @@ class CalculatorTool(LightweightTool):
         self.call_count += 1
         try:
             # Safe evaluation
-            result = eval(expression, {"__builtins__": {}})
+            result = _evaluate_arithmetic(expression)
             self.success_count += 1
             return {"success": True, "result": result, "prediction_error": 0.0}
-        except:
+        except (SyntaxError, ValueError, TypeError, ArithmeticError):
             return {
                 "success": False,
                 "error": "Calculation failed",
@@ -430,7 +430,7 @@ class FileReadTool(LightweightTool):
             content = Path(path).read_text()
             self.success_count += 1
             return {"success": True, "content": content, "prediction_error": 0.05}
-        except:
+        except (OSError, UnicodeError, ValueError):
             return {
                 "success": False,
                 "error": "File read failed",

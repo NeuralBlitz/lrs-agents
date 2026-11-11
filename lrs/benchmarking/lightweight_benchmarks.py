@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 # Import our lightweight LRS implementation
-from lrs_agents.lrs.opencode.lightweight_lrs import (
+from lrs.opencode.lightweight_lrs import (
     LightweightHierarchicalPrecision,
     LightweightFreeEnergyCalculator,
     LightweightPolicySelector,

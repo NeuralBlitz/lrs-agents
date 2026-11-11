@@ -37,6 +37,54 @@ jobs:
       with:
         file: ./coverage.xml
 
+  package:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Build wheel
+      run: |
+        python -m pip install --upgrade pip build
+        python -m build --wheel
+
+    - name: Verify distribution includes installable integration packages
+      run: |
+        python - <<'PY'
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        wheels = list(Path("dist").glob("*.whl"))
+        assert len(wheels) == 1, f"Expected one wheel, found {len(wheels)}"
+        required = {
+            "lrs/cli.py",
+            "lrs/autonomous/__init__.py",
+            "lrs/benchmarking/__init__.py",
+            "lrs/cognitive/__init__.py",
+            "lrs/opencode/__init__.py",
+            "lrs/neuralblitz_integration/messaging.py",
+            "lrs/integration/tui/__init__.py",
+        }
+        with ZipFile(wheels[0]) as wheel:
+            missing = required.difference(wheel.namelist())
+        assert not missing, f"Wheel is missing LRS modules: {sorted(missing)}"
+        PY
+
+    - name: Smoke-test wheel installation
+      run: |
+        python -m pip install --no-deps --force-reinstall dist/*.whl
+        python - <<'PY'
+        from importlib.metadata import distribution
+
+        files = {str(p) for p in distribution("lrs-agents").files}
+        assert "lrs/neuralblitz_integration/messaging.py" in files
+        assert "lrs/benchmarking/__init__.py" in files
+        PY
+
   lint:
     runs-on: ubuntu-latest
     steps:

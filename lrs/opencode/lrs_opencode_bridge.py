@@ -33,7 +33,8 @@ class OpenCodeLRSBridge:
                 )
                 if result.returncode == 0:
                     return candidate
-            except:
+            except (OSError, subprocess.TimeoutExpired):
+                # Missing executables and timed-out probes may be skipped.
                 continue
         return None
 

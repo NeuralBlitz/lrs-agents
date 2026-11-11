@@ -100,6 +100,9 @@ jobs:
         python -m pip install --upgrade pip
         pip install ruff black
     
+    - name: Enforce undefined-name and invalid-export safety checks
+      run: ruff check lrs tests --select F821,F822,F823
+
     - name: Run ruff
       id: ruff
       run: ruff check lrs tests

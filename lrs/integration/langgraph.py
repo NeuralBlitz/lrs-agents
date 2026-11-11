@@ -14,7 +14,7 @@ Usage:
     result = agent.invoke({"messages": [{"role": "user", "content": "Task"}]})
 """
 
-from typing import Dict, List, Annotated, Literal, Optional, Any
+from typing import Dict, List, Annotated, Literal, Optional, Any, TYPE_CHECKING
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, END
 from datetime import datetime
@@ -28,6 +28,9 @@ from lrs.core.free_energy import (
 )
 from lrs.core.lens import ToolLens
 from lrs.core.registry import ToolRegistry
+
+if TYPE_CHECKING:
+    from lrs.monitoring.tracker import LRSStateTracker
 
 
 # ============================================================================

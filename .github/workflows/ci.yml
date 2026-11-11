@@ -90,6 +90,8 @@ jobs:
         assert "lrs/neuralblitz_integration/messaging.py" in files
         assert "lrs/benchmarking/__init__.py" in files
         PY
+        cd /tmp
+        python -I -c "import lrs.neuralblitz_integration.messaging; import lrs.inference.evaluator; print('Installed package imports succeeded')"
 
   lint:
     runs-on: ubuntu-latest

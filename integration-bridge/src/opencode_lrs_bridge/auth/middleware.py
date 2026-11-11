@@ -4,6 +4,8 @@ Authentication and authorization layer for opencode ↔ LRS-Agents integration.
 
 import asyncio
 import ssl
+import hashlib
+import hmac
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
@@ -242,11 +244,17 @@ class AuthenticationMiddleware:
 
     async def _authenticate_api_key(self, api_key: str) -> Dict[str, Any]:
         """Authenticate using API key."""
-        # In production, validate against database
-        if api_key == "valid-api-key":
-            return {"user_id": "api-user", "permissions": ["read_state", "write_state"]}
+        # Reject every key unless a digest was explicitly provisioned.
+        # Never accept static credentials embedded in source code.
+        expected_digest = self.config.security.api_key_sha256
+        if not expected_digest:
+            raise AuthenticationError("API key authentication is not configured")
 
-        raise AuthenticationError("Invalid API key")
+        provided_digest = hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+        if not hmac.compare_digest(provided_digest, expected_digest.lower()):
+            raise AuthenticationError("Invalid API key")
+
+        return {"user_id": "api-user", "permissions": ["read_state", "write_state"]}
 
     def authorize_action(
         self,

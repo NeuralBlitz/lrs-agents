@@ -2,6 +2,8 @@
 Tests for the integration bridge API endpoints.
 """
 
+import hashlib
+
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, patch
@@ -275,6 +277,29 @@ class TestAPIAuthentication(IntegrationTestCase):
         response = self.client.get("/agents")
 
         assert response.status_code == 401
+
+    def test_hardcoded_legacy_api_key_is_rejected(self):
+        """An old source-embedded API key cannot bypass enabled authentication."""
+        self.config.security.enable_auth = True
+        self.config.security.api_key_sha256 = None
+
+        response = self.client.get("/agents", headers={"X-API-Key": "valid-api-key"})
+
+        assert response.status_code == 401
+
+    def test_explicit_api_key_digest_required(self):
+        """Only a key matching the configured digest may authenticate."""
+        self.config.security.enable_auth = True
+        provisioned_key = "test-only-high-entropy-key-please-replace-1234"
+        self.config.security.api_key_sha256 = hashlib.sha256(
+            provisioned_key.encode("utf-8")
+        ).hexdigest()
+
+        authorized = self.client.get("/agents", headers={"X-API-Key": provisioned_key})
+        unauthorized = self.client.get("/agents", headers={"X-API-Key": "wrong-key"})
+
+        assert authorized.status_code == 200
+        assert unauthorized.status_code == 401
 
     def test_invalid_authorization_header(self):
         """Test invalid authorization header."""

@@ -1,5 +1,6 @@
 """Startup contract tests for the Integration Bridge application factory."""
 
+import pytest
 from fastapi.testclient import TestClient
 
 from opencode_lrs_bridge.main import create_bridge_application
@@ -51,3 +52,12 @@ def test_application_factory_exposes_health_endpoint(
 
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
+
+
+def test_production_rejects_disabled_authentication(test_config):
+    """Production must fail closed rather than grant anonymous administrator access."""
+    test_config.environment = "production"
+    test_config.security.enable_auth = False
+
+    with pytest.raises(ValueError, match="requires authentication"):
+        create_bridge_application(test_config)

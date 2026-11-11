@@ -33,6 +33,9 @@ def create_bridge_application(
         env_file = os.getenv("INTEGRATION_BRIDGE_CONFIG") or ".env"
         config = IntegrationBridgeConfig(_env_file=env_file)
 
+    if config.environment.lower() == "production" and not config.security.enable_auth:
+        raise ValueError("Production Integration Bridge requires authentication")
+
     websocket_bridge = WebSocketBridge(config)
     analytics_manager = AnalyticsManager(config)
     state_synchronizer = StateSynchronizer(config)

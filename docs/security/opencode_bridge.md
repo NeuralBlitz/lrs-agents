@@ -7,6 +7,12 @@ untrusted networks, with the least privileges possible.
 
 ## Required configuration
 
+Install the optional bridge dependencies before importing the HTTP adapter:
+
+```sh
+python -m pip install "lrs-agents[bridge]"
+```
+
 Set a strong randomly generated bearer token before starting the bridge.
 The bridge rejects all requests if `LRS_BRIDGE_TOKEN` is missing or shorter
 than 32 characters. Do not put tokens in source files or commit them.

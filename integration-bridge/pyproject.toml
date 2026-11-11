@@ -54,7 +54,7 @@ dev = [
 ]
 
 [project.scripts]
-opencode-lrs-bridge = "opencode_lrs_bridge.cli:main"
+opencode-lrs-bridge = "opencode_lrs_bridge.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,0 +1,70 @@
+name: Integration Bridge
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "integration-bridge/**"
+      - ".github/workflows/integration-bridge.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "integration-bridge/**"
+      - ".github/workflows/integration-bridge.yml"
+
+jobs:
+  test-and-container-smoke:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: integration-bridge
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: integration-bridge/pyproject.toml
+
+      - name: Install bridge and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run Integration Bridge tests
+        run: pytest -v
+
+      - name: Build Integration Bridge container
+        run: docker build --tag integration-bridge:ci .
+
+      - name: Verify container startup and health endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach \
+            --name integration-bridge-smoke \
+            --publish 9000:9000 \
+            --env ENVIRONMENT=development \
+            --env WORKERS=1 \
+            integration-bridge:ci
+
+          cleanup() {
+            docker logs integration-bridge-smoke || true
+            docker rm --force integration-bridge-smoke >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:9000/health; then
+              echo "Integration Bridge health endpoint is ready."
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Integration Bridge did not become healthy within 60 seconds." >&2
+          exit 1

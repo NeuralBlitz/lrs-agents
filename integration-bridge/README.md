@@ -60,7 +60,7 @@ docker-compose logs -f integration-bridge
 # API: http://localhost:9000
 # WebSocket: ws://localhost:9001
 # Metrics: http://localhost:9090/metrics
-# Grafana: http://localhost:3000 (admin/admin123)
+# Grafana: http://localhost:3000 (configure administrator credentials)
 ```
 
 ### Using Kubernetes
@@ -127,6 +127,22 @@ SECURITY_OAUTH_PROVIDER_URL=https://your-oauth-provider.com
 SECURITY_OAUTH_CLIENT_ID=integration-bridge
 SECURITY_OAUTH_CLIENT_SECRET=your-client-secret
 ```
+
+### Explicit API key authentication
+
+API keys are **disabled unless configured**. Provision a unique high-entropy key
+through your secrets manager and supply its SHA-256 digest to the bridge as
+`SECURITY__API_KEY_SHA256` (64 hex characters). Send the original key only in the
+`X-API-Key` request header over HTTPS; never commit or log the original key.
+The bridge compares the configured digest in constant time, and does not accept
+any built-in demo API key. Set `SECURITY__ENABLE_AUTH=true` explicitly in
+production; the application refuses to start with authentication disabled.
+
+The nested security environment variables use a **double underscore** (for
+example `SECURITY__ENABLE_AUTH`). The legacy `SECURITY_ENABLE_AUTH` spelling
+is not a Pydantic nested-settings override. The container's mTLS startup
+switch is a separate setting and must be reviewed with its TLS termination
+configuration before enabling production mTLS.
 
 ## API Usage
 

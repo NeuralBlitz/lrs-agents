@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Bidirectional OpenCode ↔ LRS-Agents Integration."""
 
+import os
 import subprocess
 from typing import Dict, Any, Optional
 
@@ -8,9 +9,18 @@ from typing import Dict, Any, Optional
 from lrs.core.lens import ToolLens, ExecutionResult
 from lrs.core.registry import ToolRegistry
 from lrs.integration.langgraph import create_lrs_agent
+from lrs.opencode.bridge_security import (
+    build_opencode_command,
+    configured_workspace,
+    is_loopback_host,
+    resolve_bridge_directory,
+    resolve_bridge_file,
+    valid_bridge_authorization,
+    validate_bridge_url,
+)
 
 # FastAPI for API integration
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 import uvicorn
 
@@ -33,13 +43,27 @@ class OpenCodeLRSBridge:
                 )
                 if result.returncode == 0:
                     return candidate
-            except:
+            except (OSError, subprocess.TimeoutExpired):
+                # Missing executables and timed-out probes may be skipped.
                 continue
         return None
 
     def _create_api_app(self) -> FastAPI:
         """Create FastAPI app for bidirectional communication."""
         app = FastAPI(title="OpenCode ↔ LRS-Agents Bridge")
+
+        def require_bridge_authorization(
+            authorization: Optional[str] = Header(default=None),
+        ) -> None:
+            expected = os.environ.get("LRS_BRIDGE_TOKEN", "")
+            if len(expected) < 32:
+                raise HTTPException(status_code=503, detail="Bridge authentication not configured")
+            if not valid_bridge_authorization(authorization, expected):
+                raise HTTPException(
+                    status_code=401,
+                    detail="Invalid bridge authorization",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
 
         class LRSRequest(BaseModel):
             agent_id: str
@@ -51,7 +75,7 @@ class OpenCodeLRSBridge:
             working_dir: Optional[str] = "."
             timeout: Optional[int] = 30
 
-        @app.post("/lrs/create-agent")
+        @app.post("/lrs/create-agent", dependencies=[Depends(require_bridge_authorization)])
         async def create_lrs_agent_endpoint(request: LRSRequest):
             """Create new LRS agent accessible from OpenCode."""
             try:
@@ -70,10 +94,10 @@ class OpenCodeLRSBridge:
 
                 return {"status": "success", "agent_id": agent_id}
 
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+            except Exception as error:
+                raise HTTPException(status_code=500, detail="Agent operation failed") from error
 
-        @app.post("/lrs/execute")
+        @app.post("/lrs/execute", dependencies=[Depends(require_bridge_authorization)])
         async def execute_lrs_task(request: LRSRequest):
             """Execute task using LRS agent."""
             if request.agent_id not in self.lrs_agents:
@@ -88,29 +112,40 @@ class OpenCodeLRSBridge:
                     }
                 )
                 return {"result": result}
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+            except Exception as error:
+                raise HTTPException(status_code=500, detail="Agent operation failed") from error
 
-        @app.post("/opencode/execute")
+        @app.post("/opencode/execute", dependencies=[Depends(require_bridge_authorization)])
         async def execute_opencode_command(request: OpenCodeRequest):
             """Execute OpenCode command from LRS agent."""
             if not self.opencode_path:
                 raise HTTPException(status_code=503, detail="OpenCode not available")
 
             try:
-                # Parse command for opencode
-                cmd_parts = request.command.split()
-                if not cmd_parts:
-                    raise HTTPException(status_code=400, detail="Empty command")
+                if not isinstance(request.timeout, int) or not 1 <= request.timeout <= 60:
+                    raise HTTPException(status_code=400, detail="Timeout must be 1–60 seconds")
 
-                cmd = [self.opencode_path] + cmd_parts[1:]  # Skip 'opencode' prefix
+                try:
+                    workspace = configured_workspace()
+                    working_dir = resolve_bridge_directory(
+                        workspace, request.working_dir
+                    )
+                    cmd = build_opencode_command(
+                        self.opencode_path,
+                        request.command,
+                        allow_shell=os.environ.get("LRS_BRIDGE_ALLOW_SHELL") == "1",
+                    )
+                    if cmd[1] == "read":
+                        cmd[2] = resolve_bridge_file(workspace, working_dir, cmd[2])
+                except ValueError as error:
+                    raise HTTPException(status_code=400, detail=str(error)) from error
 
                 result = subprocess.run(
                     cmd,
                     capture_output=True,
                     text=True,
                     timeout=request.timeout,
-                    cwd=request.working_dir,
+                    cwd=working_dir,
                 )
 
                 return {
@@ -119,10 +154,12 @@ class OpenCodeLRSBridge:
                     "stderr": result.stderr,
                     "returncode": result.returncode,
                 }
-            except subprocess.TimeoutExpired:
-                raise HTTPException(status_code=408, detail="Command timed out")
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+            except HTTPException:
+                raise
+            except subprocess.TimeoutExpired as error:
+                raise HTTPException(status_code=408, detail="Command timed out") from error
+            except OSError as error:
+                raise HTTPException(status_code=500, detail="Command execution failed") from error
 
         return app
 
@@ -131,7 +168,9 @@ class OpenCodeLRSBridge:
         return OpenCodeToolLens()
 
     async def run_api_server(self, host: str = "localhost", port: int = 8765):
-        """Run the bridge API server."""
+        """Run a local-only bridge API; use a separately reviewed TLS proxy externally."""
+        if not is_loopback_host(host):
+            raise ValueError("OpenCode bridge may only bind to loopback addresses")
         config = uvicorn.Config(self.api_app, host=host, port=port)
         server = uvicorn.Server(config)
         await server.serve()
@@ -153,6 +192,14 @@ class OpenCodeToolLens(ToolLens):
             if not task:
                 return ExecutionResult(False, None, 0.8, "No task specified")
 
+            token = os.environ.get("LRS_BRIDGE_TOKEN", "")
+            if len(token) < 32:
+                return ExecutionResult(
+                    success=False, value=None, prediction_error=0.9,
+                    error="Bridge authentication not configured",
+                )
+            validate_bridge_url(self.bridge_url)
+
             # Map belief state to opencode command
             command = self._belief_state_to_command(belief_state)
 
@@ -163,6 +210,7 @@ class OpenCodeToolLens(ToolLens):
                     "working_dir": belief_state.get("working_directory", "."),
                     "timeout": 30,
                 },
+                headers={"Authorization": f"Bearer {token}"},
                 timeout=35,
             )
 
@@ -182,12 +230,12 @@ class OpenCodeToolLens(ToolLens):
                     error=f"Bridge API error: {response.status_code}",
                 )
 
-        except Exception as e:
+        except Exception:
             return ExecutionResult(
                 success=False,
                 value=None,
                 prediction_error=0.9,
-                error=f"OpenCode tool error: {str(e)}",
+                error="OpenCode bridge request failed",
             )
 
     def _belief_state_to_command(self, belief_state: Dict[str, Any]) -> str:

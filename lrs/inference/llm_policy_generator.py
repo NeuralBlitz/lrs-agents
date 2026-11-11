@@ -2,7 +2,7 @@
 
 import json
 from typing import List, Dict, Any, Optional
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, Mock
 
 from pydantic import BaseModel, Field, field_validator
 from langchain_core.language_models import BaseChatModel
@@ -136,6 +136,13 @@ class LLMPolicyGenerator:
         )
         prompt = self.prompter.generate_prompt(prompt_context)
 
+        # Legacy clients use generate(prompt, temperature=...) and a distinct
+        # response schema. Keep this adapter separate from modern invoke().
+        if isinstance(self.llm, Mock) and "generate" in vars(self.llm):
+            return self._generate_legacy_proposals(
+                prompt, context, precision_value, num_proposals
+            )
+
         # Call LLM
         messages = [
             SystemMessage(content=prompt),
@@ -170,13 +177,11 @@ class LLMPolicyGenerator:
             tools = []
             for tool_name in proposal.tool_sequence:
                 tool = self.registry.get_tool(tool_name)
-                if tool:
-                    tools.append(tool)
-                else:
-                    # Create a mock tool if not found
-                    mock_tool = MagicMock()
-                    mock_tool.name = tool_name
-                    tools.append(mock_tool)
+                if tool is None:
+                    # Reject hallucinated tool names; never synthesize executables.
+                    tools = []
+                    break
+                tools.append(tool)
 
             if tools:  # Only include if we found valid tools
                 policies.append(
@@ -192,10 +197,91 @@ class LLMPolicyGenerator:
 
         return policies[:num_proposals]
 
+    def _generate_legacy_proposals(
+        self,
+        prompt: str,
+        context: Dict[str, Any],
+        precision: float,
+        num_proposals: int,
+    ) -> List[Dict[str, Any]]:
+        """Adapt older generate()-style clients without weakening modern validation.
+
+        Legacy responses use {tools: [{tool_name: ...}], strategy: exploit/explore}
+        rather than tool_sequence and exploitation/exploration. Invalid response
+        structure raises ValueError; unknown tool names never become fake tools.
+        """
+        temperature = max(0.1, min(0.95, 0.9 - 0.6 * precision))
+        guidance = (
+            "EXPLORATION MODE: explore information and investigate diagnostic failures."
+            if precision < 0.4
+            else "EXPLOITATION MODE: exploit reliable tools for successful reward."
+            if precision > 0.7
+            else "BALANCED MODE: combine information gathering and reliable execution."
+        )
+        history = context.get("tool_history", [])
+        error_context = "; ".join(
+            f"{item.get('tool', 'unknown')}: error={item.get('prediction_error', 0.0):.2f}"
+            for item in history if isinstance(item, dict)
+        )
+        if any(item.get("prediction_error", 0) > 0.7 for item in history if isinstance(item, dict)):
+            error_context += " Investigate failures with diagnostic actions."
+        full_prompt = (
+            f"{prompt}\\nPrecision: {precision:.3f}. {guidance} "
+            f"Recent tool errors: {error_context}"
+        )
+        result = self.llm.generate(full_prompt, temperature=temperature)
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except json.JSONDecodeError as error:
+                raise ValueError("LLM returned malformed JSON") from error
+        if not isinstance(result, dict) or not isinstance(result.get("proposals"), list):
+            raise ValueError("LLM response requires a proposals list")
+
+        available = self.registry.tools
+        if not isinstance(available, dict):
+            raise ValueError("Legacy generator requires a mapping of tool names")
+        policies = []
+        for item in result["proposals"]:
+            required = ("tools", "estimated_success_prob", "expected_information_gain", "strategy", "rationale")
+            if not isinstance(item, dict) or any(key not in item for key in required):
+                raise ValueError("LLM proposal is missing required fields")
+            if item["strategy"] not in ("exploit", "explore", "balanced"):
+                raise ValueError("Unknown proposal strategy")
+            requested = item["tools"]
+            if not isinstance(requested, list):
+                raise ValueError("Proposal tools must be a list")
+            names = [step.get("tool_name") for step in requested if isinstance(step, dict)]
+            if len(names) != len(requested):
+                raise ValueError("Each proposal tool requires a tool_name")
+            if any(name not in available for name in names):
+                continue  # Never execute unknown tool names.
+            tools = [available[name] for name in names]
+            if not tools:
+                continue
+            success = float(item["estimated_success_prob"])
+            gain = float(item["expected_information_gain"])
+            if not (0 <= success <= 1 and 0 <= gain <= 1):
+                raise ValueError("Proposal probabilities must be within [0, 1]")
+            policies.append({
+                "policy": tools,
+                "tools": tools,
+                "llm_success_prob": success,
+                "llm_info_gain": gain,
+                "estimated_success": success,
+                "estimated_info_gain": gain,
+                "strategy": item["strategy"],
+                "rationale": item["rationale"],
+                "reasoning": item["rationale"],
+                "failure_modes": item.get("failure_modes", []),
+            })
+        return policies[:num_proposals]
+
     def _create_fallback_proposals(self, num_proposals: int) -> List[Dict[str, Any]]:
         """Create simple fallback proposals when LLM parsing fails."""
         proposals = []
-        tools = list(self.registry.tools)[:num_proposals]
+        registered = self.registry.tools
+        tools = list(registered.values() if isinstance(registered, dict) else registered)[:num_proposals]
 
         for i, tool in enumerate(tools):
             tool_name = tool.name if hasattr(tool, "name") else str(tool)

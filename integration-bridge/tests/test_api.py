@@ -2,10 +2,14 @@
 Tests for the integration bridge API endpoints.
 """
 
+import hashlib
+
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, patch
 import json
+import httpx
+from fastapi import HTTPException
 
 from opencode_lrs_bridge.api.endpoints import IntegrationBridgeAPI
 from opencode_lrs_bridge.models.schemas import (
@@ -274,6 +278,33 @@ class TestAPIAuthentication(IntegrationTestCase):
 
         assert response.status_code == 401
 
+    def test_hardcoded_legacy_api_key_is_rejected(self):
+        """An old source-embedded API key cannot bypass enabled authentication."""
+        self.config.security.enable_auth = True
+        self.config.security.api_key_sha256 = None
+
+        response = self.client.get("/agents", headers={"X-API-Key": "valid-api-key"})
+
+        assert response.status_code == 401
+
+    def test_explicit_api_key_digest_required(self):
+        """Only a key matching the configured digest may authenticate."""
+        self.config.security.enable_auth = True
+        provisioned_key = "test-only-high-entropy-key-please-replace-1234"
+        self.config.security.api_key_sha256 = hashlib.sha256(
+            provisioned_key.encode("utf-8")
+        ).hexdigest()
+
+        authorized = self.client.get("/agents", headers={"X-API-Key": provisioned_key})
+        unauthorized = self.client.get("/agents", headers={"X-API-Key": "wrong-key"})
+        forbidden = self.client.delete(
+            "/agents/other-agent", headers={"X-API-Key": provisioned_key}
+        )
+
+        assert authorized.status_code == 200
+        assert unauthorized.status_code == 401
+        assert forbidden.status_code == 403
+
     def test_invalid_authorization_header(self):
         """Test invalid authorization header."""
         # Enable auth
@@ -314,26 +345,26 @@ class TestAPIErrorHandling(IntegrationTestCase):
         self.bridge_api = IntegrationBridgeAPI(self.config)
         self.client = TestClient(self.bridge_api.app)
 
+    @pytest.mark.asyncio
     @patch("opencode_lrs_bridge.api.endpoints.httpx.AsyncClient")
-    def test_external_service_error(self, mock_client_class):
-        """Test handling of external service errors."""
-        # Setup mock to raise exception
+    async def test_external_service_error(self, mock_client_class):
+        """Test that LRS registration errors are translated to HTTP 500."""
         mock_client = AsyncMock()
-        mock_client_class.return_value = mock_client
-        mock_client.post.side_effect = Exception("Service unavailable")
+        mock_client.post.side_effect = httpx.ConnectError("Service unavailable")
+        mock_client_class.return_value.__aenter__.return_value = mock_client
 
-        request_data = {
-            "agent_id": "test_agent_001",
-            "agent_type": "hybrid",
-            "config": {},
-            "tools": [],
-        }
+        request = AgentCreateRequest(
+            agent_id="test_agent_001",
+            agent_type=AgentType.HYBRID,
+            config={},
+            tools=[],
+        )
 
-        response = self.client.post("/agents", json=request_data)
+        with pytest.raises(HTTPException) as error:
+            await self.bridge_api.agent_manager._register_with_lrs(request)
 
-        assert response.status_code == 500
-        data = response.json()
-        assert "Failed to register with LRS" in data["detail"]
+        assert error.value.status_code == 500
+        assert "Failed to register with LRS" in error.value.detail
 
     def test_invalid_json_payload(self):
         """Test handling of invalid JSON payload."""

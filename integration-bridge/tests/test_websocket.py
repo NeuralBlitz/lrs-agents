@@ -139,6 +139,7 @@ class TestConnectionManager(WebSocketTestCase):
 
         for conn_id in connection_ids:
             ws = Mock()
+            ws.accept = AsyncMock()
             ws.send_text = AsyncMock()
             websockets.append(ws)
 
@@ -159,12 +160,12 @@ class TestConnectionManager(WebSocketTestCase):
     @pytest.mark.asyncio
     async def test_heartbeat_functionality(self):
         """Test heartbeat functionality."""
-        # Connect
+        # Connect with a short heartbeat interval for deterministic testing.
+        self.config.websocket.heartbeat_interval = 0.05
         await self.connection_manager.connect(
             self.websocket, self.connection_id, self.user_info
         )
 
-        # Wait for heartbeat interval (reduced for testing)
         await asyncio.sleep(0.1)
 
         # Check if heartbeat message was sent
@@ -184,6 +185,9 @@ class TestEventProcessor(WebSocketTestCase):
         """Set up test method."""
         super().setup_method()
         self.connection_manager = Mock()
+        self.connection_manager.subscribe_to_agent = AsyncMock(return_value=True)
+        self.connection_manager.unsubscribe_from_agent = AsyncMock(return_value=True)
+        self.connection_manager.send_message = AsyncMock(return_value=True)
         self.event_processor = EventProcessor(self.config, self.connection_manager)
 
     @pytest.mark.asyncio

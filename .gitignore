@@ -21,3 +21,13 @@ __pycache__/
 htmlcov/
 .venv/
 venv/
+
+# Additional generated Python and tooling artifacts
+build/
+dist/
+*.egg-info/
+.ruff_cache/
+.mypy_cache/
+.tox/
+.coverage.*
+coverage.xml

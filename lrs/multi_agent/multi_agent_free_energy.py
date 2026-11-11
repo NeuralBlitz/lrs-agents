@@ -137,4 +137,5 @@ def should_communicate_based_on_G(
     total = prob_communicate + prob_no_communicate
     prob_communicate /= total
 
-    return np.random.random() < prob_communicate
+    # Return a native Python bool, not numpy.bool_, for a stable public API.
+    return bool(np.random.random() < prob_communicate)

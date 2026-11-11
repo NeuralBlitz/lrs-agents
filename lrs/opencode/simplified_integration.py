@@ -38,7 +38,9 @@ class OpenCodeTool(SimplifiedToolLens):
                 )
                 if result.returncode == 0:
                     return candidate
-            except:
+            except (OSError, subprocess.TimeoutExpired):
+                # Missing binaries and timed-out probes are expected discovery failures.
+                # Do not swallow KeyboardInterrupt/SystemExit or unrelated bugs.
                 continue
         return None
 

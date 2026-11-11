@@ -1,6 +1,7 @@
 """Hybrid Expected Free Energy evaluation."""
 
 from typing import List, Dict, Any, Optional
+import math
 
 
 from lrs.core.free_energy import (
@@ -92,7 +93,6 @@ class HybridGEvaluator:
         # Calculate mathematical G
         G_math = calculate_expected_free_energy(
             policy=policy,
-            state=state,
             preferences=preferences,
             historical_stats=historical_stats,
             epistemic_weight=self.epistemic_weight
@@ -102,8 +102,12 @@ class HybridGEvaluator:
         G_llm = self._calculate_llm_g(proposal, preferences)
         
         # Adaptive interpolation
+        if not math.isfinite(precision) or not 0.0 <= precision <= 1.0:
+            raise ValueError("precision must be finite and within [0, 1]")
         lambda_weight = self.lambda_fn(precision)
-        
+        if not math.isfinite(lambda_weight) or not 0.0 <= lambda_weight <= 1.0:
+            raise ValueError("hybrid interpolation weight must be within [0, 1]")
+
         # Hybrid G
         G_hybrid = (1 - lambda_weight) * G_math + lambda_weight * G_llm
         
@@ -178,7 +182,10 @@ class HybridGEvaluator:
             
             # Also calculate pure mathematical G for comparison
             G_math = calculate_expected_free_energy(
-                policy, state, preferences, historical_stats
+                policy=policy,
+                preferences=preferences,
+                historical_stats=historical_stats,
+                epistemic_weight=self.epistemic_weight
             )
             
             # Estimate success probability
@@ -239,7 +246,10 @@ def compare_math_vs_llm(
     
     # Mathematical G
     G_math = calculate_expected_free_energy(
-        policy, state, preferences, historical_stats
+        policy=policy,
+        preferences=preferences,
+        historical_stats=historical_stats,
+        epistemic_weight=evaluator.epistemic_weight
     )
     
     # LLM G

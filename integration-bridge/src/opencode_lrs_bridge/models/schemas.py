@@ -68,11 +68,11 @@ class AgentState(BaseModel):
 class ToolExecutionRequest(BaseModel):
     """Tool execution request."""
 
-    tool_name: str
-    parameters: Dict[str, Any] = {}
+    tool_name: str = Field(min_length=1)
+    parameters: Dict[str, Any] = Field(default_factory=dict)
     timeout: float = 30.0
     agent_id: Optional[str] = None
-    context: Dict[str, Any] = {}
+    context: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ToolExecutionResult(BaseModel):

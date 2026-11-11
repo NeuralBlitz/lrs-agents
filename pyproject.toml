@@ -73,16 +73,10 @@ Documentation = "https://lrs-agents.readthedocs.io"
 Repository = "https://github.com/NeuralBlitz/lrs-agents"
 Issues = "https://github.com/NeuralBlitz/lrs-agents/issues"
 
-[tool.setuptools]
-packages = [
-    "lrs",
-    "lrs.core",
-    "lrs.inference",
-    "lrs.integration",
-    "lrs.monitoring",
-    "lrs.multi_agent",
-    "lrs.benchmarks",
-]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["lrs", "lrs.*"]
+namespaces = false
 
 [tool.setuptools.package-data]
 lrs = ["py.typed"]

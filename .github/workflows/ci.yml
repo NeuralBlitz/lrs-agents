@@ -82,7 +82,7 @@ jobs:
 
     - name: Smoke-test wheel installation
       run: |
-        python -m pip install --no-deps --force-reinstall dist/*.whl
+        python -m pip install --force-reinstall dist/*.whl
         python - <<'PY'
         from importlib.metadata import distribution
 

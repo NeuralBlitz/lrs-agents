@@ -289,7 +289,9 @@ class IntegrationTestCase:
             environment="test",
             debug=True,
             security=SecurityConfig(
-                enable_auth=True,
+                # Endpoint behavior tests run unauthenticated by default.
+                # Authentication-specific tests explicitly enable this flag.
+                enable_auth=False,
                 oauth_provider_url="http://test-auth:8080",
                 oauth_client_id="test_client",
                 oauth_client_secret="test_secret",

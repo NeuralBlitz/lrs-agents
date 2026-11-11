@@ -4,6 +4,8 @@ Authentication and authorization layer for opencode ↔ LRS-Agents integration.
 
 import asyncio
 import ssl
+import hashlib
+import hmac
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
@@ -146,6 +148,11 @@ class PermissionManager:
         if "system_admin" in user_permissions:
             return True
 
+        # Scope-group names (read_state, write_state, etc.) are valid
+        # first-class permissions, alongside their concrete action aliases.
+        if required_permission in user_permissions:
+            return True
+
         for perm in user_permissions:
             if perm in self.permissions.get(required_permission, []):
                 return True
@@ -199,16 +206,17 @@ class AuthenticationMiddleware:
         self.mtls_validator = MTLSValidator(config)
         self.security = HTTPBearer(auto_error=False)
 
-    async def authenticate_request(
-        self,
-        request: Request,
-        credentials: Optional[HTTPAuthorizationCredentials] = Depends(
-            HTTPBearer(auto_error=False)
-        ),
-    ) -> Dict[str, Any]:
-        """Authenticate incoming request."""
-        # Validate mTLS if enabled
+    async def authenticate_request(self, request: Request) -> Dict[str, Any]:
+        """Authenticate incoming request from the actual request headers."""
+        # Validate mTLS even when application-level authentication is disabled.
         self.mtls_validator.validate_client_certificate(request)
+
+        if not self.config.security.enable_auth:
+            return {"user_id": "anonymous", "permissions": ["system_admin"]}
+
+        # Resolve the bearer token explicitly because this method is invoked
+        # from a dependency helper rather than registered as a FastAPI dependency.
+        credentials = await self.security(request)
 
         # Check for JWT token
         if credentials and credentials.scheme == "Bearer":
@@ -241,11 +249,17 @@ class AuthenticationMiddleware:
 
     async def _authenticate_api_key(self, api_key: str) -> Dict[str, Any]:
         """Authenticate using API key."""
-        # In production, validate against database
-        if api_key == "valid-api-key":
-            return {"user_id": "api-user", "permissions": ["read_state", "write_state"]}
+        # Reject every key unless a digest was explicitly provisioned.
+        # Never accept static credentials embedded in source code.
+        expected_digest = self.config.security.api_key_sha256
+        if not expected_digest:
+            raise AuthenticationError("API key authentication is not configured")
 
-        raise AuthenticationError("Invalid API key")
+        provided_digest = hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+        if not hmac.compare_digest(provided_digest, expected_digest.lower()):
+            raise AuthenticationError("Invalid API key")
+
+        return {"user_id": "api-user", "permissions": ["read_state", "write_state"]}
 
     def authorize_action(
         self,
@@ -276,13 +290,16 @@ class AuthenticationMiddleware:
         raise AuthorizationError("Insufficient permissions")
 
 
+def get_auth_middleware(request: Request) -> AuthenticationMiddleware:
+    """Resolve the single configured middleware instance from application state."""
+    return request.app.state.auth_middleware
+
+
 def get_current_user():
     """FastAPI dependency to get current authenticated user."""
 
-    async def dependency(
-        request: Request,
-        auth_middleware: AuthenticationMiddleware = Depends(),
-    ):
+    async def dependency(request: Request):
+        auth_middleware = get_auth_middleware(request)
         return await auth_middleware.authenticate_request(request)
 
     return dependency
@@ -291,10 +308,8 @@ def get_current_user():
 def require_permission(permission: str, agent_id: Optional[str] = None):
     """FastAPI dependency to require specific permission."""
 
-    async def dependency(
-        request: Request,
-        auth_middleware: AuthenticationMiddleware = Depends(),
-    ):
+    async def dependency(request: Request):
+        auth_middleware = get_auth_middleware(request)
         current_user = await auth_middleware.authenticate_request(request)
         auth_middleware.authorize_action(current_user, permission, agent_id)
         return current_user

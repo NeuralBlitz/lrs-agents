@@ -1,11 +1,10 @@
 # Integration Bridge Dockerfile
 FROM python:3.11-slim
 
-# Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Install system dependencies required by cryptography and native wheels.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     libffi-dev \
@@ -13,32 +12,28 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
-COPY pyproject.toml ./
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -e .
-
-# Copy application code
+# Copy package metadata and source before installation so setuptools can
+# discover the src-layout package during the editable install.
+COPY pyproject.toml README.md ./
 COPY src/ ./src/
-COPY docker/entrypoint.sh ./
 
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash app && \
-    chown -R app:app /app
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir .
+
+# Copy the runtime entrypoint to the exact path used by ENTRYPOINT.
+COPY --chmod=755 docker/entrypoint.sh /app/entrypoint.sh
+
+# Run as a non-root user.
+RUN useradd --create-home --shell /bin/bash app \
+    && chown -R app:app /app
 USER app
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:9000/health || exit 1
 
-# Expose ports
 EXPOSE 9000 9001 9090
 
-# Set environment variables
 ENV PYTHONPATH=/app/src
 ENV PYTHONUNBUFFERED=1
 
-# Start the application
-ENTRYPOINT ["/app/docker/entrypoint.sh"]
-CMD ["opencode-lrs-bridge"]
+ENTRYPOINT ["/app/entrypoint.sh"]

@@ -22,6 +22,11 @@ class SecurityConfig(BaseModel):
     jwt_public_key: Optional[str] = Field(
         "test_public_key", description="JWT public key (must be set via environment)"
     )
+    api_key_sha256: Optional[str] = Field(
+        None,
+        pattern=r"^[0-9a-fA-F]{64}$",
+        description="SHA-256 digest of a provisioned high-entropy API key",
+    )
     enable_mtls: bool = Field(False, description="Enable mutual TLS")
     cert_file: Optional[str] = Field(None, description="Certificate file path")
     key_file: Optional[str] = Field(None, description="Private key file path")
@@ -148,6 +153,7 @@ class IntegrationBridgeConfig(BaseSettings):
     monitoring: MonitoringConfig = Field(default_factory=lambda: MonitoringConfig())
 
     class Config:
+        env_nested_delimiter = "__"
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False

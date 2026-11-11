@@ -7,6 +7,9 @@ using the lightweight LRS implementation for environments
 without NumPy dependencies.
 """
 
+import ast
+import math
+import operator
 import os
 import json
 import time
@@ -397,6 +400,50 @@ class LightweightGAIABenchmark:
 
 
 # Simple tool implementations for GAIA
+
+_ALLOWED_ARITHMETIC = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+}
+_ALLOWED_UNARY = {ast.UAdd: operator.pos, ast.USub: operator.neg}
+
+
+def _evaluate_arithmetic(expression: str):
+    """Evaluate only bounded arithmetic, never Python names or attribute access."""
+    if not isinstance(expression, str) or len(expression) > 256:
+        raise ValueError("Expression must be a short string")
+
+    root = ast.parse(expression, mode="eval")
+
+    def evaluate(node, depth=0):
+        if depth > 20:
+            raise ValueError("Expression too deeply nested")
+        if isinstance(node, ast.Expression):
+            return evaluate(node.body, depth + 1)
+        if isinstance(node, ast.Constant) and type(node.value) in (int, float):
+            result = node.value
+        elif isinstance(node, ast.UnaryOp) and type(node.op) in _ALLOWED_UNARY:
+            result = _ALLOWED_UNARY[type(node.op)](evaluate(node.operand, depth + 1))
+        elif isinstance(node, ast.BinOp) and type(node.op) in _ALLOWED_ARITHMETIC:
+            left = evaluate(node.left, depth + 1)
+            right = evaluate(node.right, depth + 1)
+            if isinstance(node.op, ast.Pow) and (abs(right) > 12 or abs(left) > 1e6):
+                raise ValueError("Exponentiation exceeds safety limits")
+            result = _ALLOWED_ARITHMETIC[type(node.op)](left, right)
+        else:
+            raise ValueError("Only arithmetic expressions are supported")
+        if not math.isfinite(result) or abs(result) > 1e12:
+            raise ValueError("Arithmetic result exceeds safety limits")
+        return result
+
+    return evaluate(root)
+
+
 class CalculatorTool(LightweightTool):
     def __init__(self):
         super().__init__("calculator")

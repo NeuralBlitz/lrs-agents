@@ -148,6 +148,11 @@ class PermissionManager:
         if "system_admin" in user_permissions:
             return True
 
+        # Scope-group names (read_state, write_state, etc.) are valid
+        # first-class permissions, alongside their concrete action aliases.
+        if required_permission in user_permissions:
+            return True
+
         for perm in user_permissions:
             if perm in self.permissions.get(required_permission, []):
                 return True

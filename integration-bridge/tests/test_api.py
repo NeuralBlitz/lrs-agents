@@ -297,9 +297,13 @@ class TestAPIAuthentication(IntegrationTestCase):
 
         authorized = self.client.get("/agents", headers={"X-API-Key": provisioned_key})
         unauthorized = self.client.get("/agents", headers={"X-API-Key": "wrong-key"})
+        forbidden = self.client.delete(
+            "/agents/other-agent", headers={"X-API-Key": provisioned_key}
+        )
 
         assert authorized.status_code == 200
         assert unauthorized.status_code == 401
+        assert forbidden.status_code == 403
 
     def test_invalid_authorization_header(self):
         """Test invalid authorization header."""

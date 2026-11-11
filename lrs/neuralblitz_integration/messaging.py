@@ -100,9 +100,13 @@ class Message:
 class UnifiedMessageBus:
     """High-performance message bus for bidirectional communication."""
 
-    def __init__(self):
+    def __init__(self, max_queue_size: int = 1000, max_history_size: int = 1000):
+        if max_queue_size < 1 or max_history_size < 1:
+            raise ValueError("message queue and history capacities must be positive")
+        self._max_queue_size = max_queue_size
+        self._max_history_size = max_history_size
         self._subscribers: Dict[MessageType, Set[Callable]] = defaultdict(set)
-        self._message_queue: asyncio.Queue = asyncio.Queue()
+        self._message_queue: asyncio.Queue = asyncio.Queue(maxsize=max_queue_size)
         self._running = False
         self._task: Optional[asyncio.Task] = None
         self._message_history: Dict[str, Message] = {}
@@ -134,22 +138,30 @@ class UnifiedMessageBus:
         logger.info("UnifiedMessageBus stopped")
 
     async def publish(self, message: Message) -> bool:
-        """Publish a message to all subscribers."""
+        """Queue a message without waiting; return False if expired or at capacity."""
         if message.is_expired():
             logger.warning(f"Message {message.id} expired, dropping")
             self._stats["messages_failed"] += 1
             return False
 
-        self._message_history[message.id] = message
-        self._stats["messages_sent"] += 1
-
+        # Bounded, nonblocking queueing prevents stalled subscribers from
+        # turning a burst of messages into unbounded process memory growth.
         try:
-            await self._message_queue.put(message)
-            return True
-        except Exception as e:
-            logger.error(f"Failed to publish message {message.id}: {e}")
+            self._message_queue.put_nowait(message)
+        except asyncio.QueueFull:
+            logger.warning("Message queue full, dropping message %s", message.id)
             self._stats["messages_failed"] += 1
             return False
+
+        # Record only messages accepted into the queue, retaining the newest
+        # N distinct IDs to cap the diagnostic history's memory footprint.
+        self._message_history.pop(message.id, None)
+        self._message_history[message.id] = message
+        while len(self._message_history) > self._max_history_size:
+            oldest_id = next(iter(self._message_history))
+            del self._message_history[oldest_id]
+        self._stats["messages_sent"] += 1
+        return True
 
     async def subscribe(
         self, message_type: MessageType, callback: Callable[[Message], None]
@@ -229,6 +241,8 @@ class UnifiedMessageBus:
             **self._stats,
             "queue_size": self._message_queue.qsize(),
             "message_history_size": len(self._message_history),
+            "max_queue_size": self._max_queue_size,
+            "max_history_size": self._max_history_size,
             "running": self._running,
         }
 

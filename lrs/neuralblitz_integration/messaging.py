@@ -2,7 +2,7 @@
 Unified Message Bus for LRS-Agents ↔ NeuralBlitz-v50 Communication
 
 Provides high-performance asynchronous messaging system with type safety,
-message routing, and guaranteed delivery semantics.
+message routing, and best-effort in-process delivery with error accounting.
 """
 
 import asyncio
@@ -77,9 +77,13 @@ class Message:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Message":
         """Create message from dictionary."""
-        data["type"] = MessageType(data["type"])
-        data["timestamp"] = datetime.fromisoformat(data["timestamp"])
-        return cls(**data)
+        # Deserialization must not mutate the caller's reusable payload.
+        values = dict(data)
+        if not isinstance(values["type"], MessageType):
+            values["type"] = MessageType(values["type"])
+        if isinstance(values["timestamp"], str):
+            values["timestamp"] = datetime.fromisoformat(values["timestamp"])
+        return cls(**values)
 
     def is_expired(self) -> bool:
         """Check if message has expired based on TTL."""
@@ -151,16 +155,20 @@ class UnifiedMessageBus:
         self, message_type: MessageType, callback: Callable[[Message], None]
     ) -> None:
         """Subscribe to a specific message type."""
-        self._subscribers[message_type].add(callback)
-        self._stats["subscribers"] += 1
+        subscribers = self._subscribers[message_type]
+        if callback not in subscribers:
+            subscribers.add(callback)
+            self._stats["subscribers"] += 1
         logger.debug(f"Subscribed to {message_type}")
 
     async def unsubscribe(
         self, message_type: MessageType, callback: Callable[[Message], None]
     ) -> None:
         """Unsubscribe from a specific message type."""
-        self._subscribers[message_type].discard(callback)
-        self._stats["subscribers"] -= 1
+        subscribers = self._subscribers.get(message_type)
+        if subscribers and callback in subscribers:
+            subscribers.remove(callback)
+            self._stats["subscribers"] -= 1
         logger.debug(f"Unsubscribed from {message_type}")
 
     async def _message_loop(self) -> None:
@@ -169,7 +177,11 @@ class UnifiedMessageBus:
             try:
                 # Wait for message with timeout
                 message = await asyncio.wait_for(self._message_queue.get(), timeout=1.0)
-                await self._process_message(message)
+                try:
+                    await self._process_message(message)
+                finally:
+                    # Ensure queue.join() is released after handling this item.
+                    self._message_queue.task_done()
             except asyncio.TimeoutError:
                 continue
             except Exception as e:
@@ -186,7 +198,10 @@ class UnifiedMessageBus:
             # Execute all subscribers concurrently
             if subscribers:
                 tasks = [self._safe_execute_callback(callback, message) for callback in subscribers]
-                await asyncio.gather(*tasks, return_exceptions=True)
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                if any(result is not True for result in results):
+                    # A message is considered failed when any subscriber fails.
+                    self._stats["messages_failed"] += 1
             else:
                 logger.warning(f"No subscribers for message type {message.type}")
 
@@ -196,15 +211,17 @@ class UnifiedMessageBus:
 
     async def _safe_execute_callback(
         self, callback: Callable[[Message], None], message: Message
-    ) -> None:
-        """Safely execute a subscriber callback."""
+    ) -> bool:
+        """Execute one callback, reporting failures to the message loop."""
         try:
             if asyncio.iscoroutinefunction(callback):
                 await callback(message)
             else:
                 callback(message)
-        except Exception as e:
-            logger.error(f"Error in subscriber callback: {e}")
+            return True
+        except Exception:
+            logger.exception("Error in subscriber callback")
+            return False
 
     def get_stats(self) -> Dict[str, Any]:
         """Get message bus statistics."""
@@ -217,6 +234,10 @@ class UnifiedMessageBus:
 
     def get_message_history(self, limit: int = 100) -> List[Message]:
         """Get recent message history."""
+        if limit < 0:
+            raise ValueError("history limit must be nonnegative")
+        if limit == 0:
+            return []
         return list(self._message_history.values())[-limit:]
 
     async def clear_history(self) -> None:

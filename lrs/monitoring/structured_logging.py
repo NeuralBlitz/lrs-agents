@@ -67,8 +67,11 @@ class LRSLogger:
         self.logger.setLevel(level)
         self.logger.propagate = False
         
-        # Remove existing handlers
-        self.logger.handlers.clear()
+        # Reconfiguring an existing agent logger must release open file handles.
+        # Clearing the list alone leaks file descriptors and keeps files open.
+        for handler in list(self.logger.handlers):
+            self.logger.removeHandler(handler)
+            handler.close()
         
         # JSON file handler
         if log_file:

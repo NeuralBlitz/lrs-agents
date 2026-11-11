@@ -7,7 +7,7 @@ from lrs.core.free_energy import (
     calculate_epistemic_value,
     calculate_pragmatic_value,
     calculate_expected_free_energy,
-    # evaluate_policy,  # REMOVE THIS LINE
+    evaluate_policy,
     precision_weighted_selection,
     PolicyEvaluation,
 )
@@ -87,7 +87,7 @@ class TestPragmaticValue:
 
         historical_stats = {"reliable_tool": {"success_rate": 0.9}}
 
-        pragmatic = calculate_pragmatic_value(policy, {}, preferences, historical_stats)
+        pragmatic = calculate_pragmatic_value(policy, preferences, historical_stats=historical_stats)
 
         assert pragmatic > 0  # Positive expected reward
 
@@ -103,7 +103,7 @@ class TestPragmaticValue:
             }
         }
 
-        pragmatic = calculate_pragmatic_value(policy, {}, preferences, historical_stats)
+        pragmatic = calculate_pragmatic_value(policy, preferences, historical_stats=historical_stats)
 
         assert pragmatic < 0  # Negative expected reward
 
@@ -115,11 +115,27 @@ class TestPragmaticValue:
         historical_stats = {f"tool_{i}": {"success_rate": 1.0} for i in range(5)}
 
         pragmatic = calculate_pragmatic_value(
-            policy, {}, preferences, historical_stats, discount_factor=0.9
+            policy, preferences, historical_stats=historical_stats, discount_factor=0.9
         )
 
         # Should be less than 5 steps * 5.0 reward due to discounting
         assert pragmatic < 25.0
+
+    def test_geometric_temporal_discounting(self):
+        """Five positive-reward steps use weights 1, gamma, gamma^2, ..."""
+        policy = [MockTool(f"step_{i}") for i in range(3)]
+        stats = {tool.name: {"success_rate": 1.0} for tool in policy}
+        actual = calculate_pragmatic_value(
+            policy,
+            {"success": 5.0, "error": -3.0, "step_cost": 0.0},
+            historical_stats=stats,
+            discount_factor=0.5,
+        )
+        assert actual == pytest.approx(5.0 * (1.0 + 0.5 + 0.25))
+
+    def test_discount_factor_rejects_out_of_bounds(self):
+        with pytest.raises(ValueError, match="discount_factor"):
+            calculate_pragmatic_value([MockTool()], {"success": 5.0}, discount_factor=1.1)
 
     def test_step_cost(self):
         """Step costs should reduce pragmatic value"""
@@ -129,7 +145,7 @@ class TestPragmaticValue:
 
         historical_stats = {"tool": {"success_rate": 1.0}}
 
-        pragmatic = calculate_pragmatic_value(policy, {}, preferences, historical_stats)
+        pragmatic = calculate_pragmatic_value(policy, preferences, historical_stats=historical_stats)
 
         # Should include step cost
         assert pragmatic < 5.0
@@ -144,9 +160,9 @@ class TestExpectedFreeEnergy:
         preferences = {"success": 5.0}
 
         epistemic = calculate_epistemic_value(policy, {}, None)
-        pragmatic = calculate_pragmatic_value(policy, {}, preferences, None)
+        pragmatic = calculate_pragmatic_value(policy, preferences)
 
-        G = calculate_expected_free_energy(policy, {}, preferences, None)
+        G = calculate_expected_free_energy(policy, {}, preferences, precision=0.0)
 
         # Should equal epistemic - pragmatic
         assert abs(G - (epistemic - pragmatic)) < 0.01
@@ -163,8 +179,8 @@ class TestExpectedFreeEnergy:
             "bad_tool": {"success_rate": 0.3, "error_variance": 0.5},
         }
 
-        G_good = calculate_expected_free_energy(good_policy, {}, preferences, historical_stats)
-        G_bad = calculate_expected_free_energy(bad_policy, {}, preferences, historical_stats)
+        G_good = calculate_expected_free_energy(good_policy, {}, preferences, historical_stats=historical_stats)
+        G_bad = calculate_expected_free_energy(bad_policy, {}, preferences, historical_stats=historical_stats)
 
         assert G_good < G_bad
 

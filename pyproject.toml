@@ -46,6 +46,11 @@ langchain = [
 openai = [
     "openai>=1.0.0",
 ]
+bridge = [
+    "fastapi>=0.110.0",
+    "uvicorn>=0.27.0",
+    "requests>=2.31.0",
+]
 monitoring = [
     "streamlit>=1.28.0",
     "plotly>=5.18.0",
@@ -64,7 +69,7 @@ dev = [
     "pre-commit>=3.5.0",
 ]
 all = [
-    "lrs-agents[langchain,openai,monitoring,test,dev]",
+    "lrs-agents[langchain,openai,monitoring,test,dev,bridge]",
 ]
 
 [project.urls]
@@ -73,16 +78,10 @@ Documentation = "https://lrs-agents.readthedocs.io"
 Repository = "https://github.com/NeuralBlitz/lrs-agents"
 Issues = "https://github.com/NeuralBlitz/lrs-agents/issues"
 
-[tool.setuptools]
-packages = [
-    "lrs",
-    "lrs.core",
-    "lrs.inference",
-    "lrs.integration",
-    "lrs.monitoring",
-    "lrs.multi_agent",
-    "lrs.benchmarks",
-]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["lrs", "lrs.*"]
+namespaces = false
 
 [tool.setuptools.package-data]
 lrs = ["py.typed"]

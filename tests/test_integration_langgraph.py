@@ -267,7 +267,7 @@ class TestLRSGraphBuilder:
 
         assert next_node == "success"
 
-    def test_precision_gate_ends_on_max_iterations(self):
+    def test_decision_gate_fails_on_low_precision(self):
         """Test decision gate routing - end on max iterations"""
         mock_llm = Mock()
         registry = ToolRegistry()

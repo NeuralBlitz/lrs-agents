@@ -5,13 +5,17 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-latest, macos-latest]
         python-version: ['3.9', '3.10', '3.11', '3.12']
     
     steps:
@@ -25,17 +29,73 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e ".[test]"
+        pip install -e ".[test,bridge]"
     
     - name: Run tests
       run: |
-        pytest tests/ -v --cov=lrs --cov-report=xml --cov-report=term-missing
+        pytest tests/ -v --cov=lrs --cov-report=xml --cov-report=term-missing --cov-fail-under=18
     
     - name: Upload coverage
       uses: codecov/codecov-action@v4
-      if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+      if: matrix.os == 'ubuntu-24.04' && matrix.python-version == '3.11'
       with:
         file: ./coverage.xml
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Build wheel
+      run: |
+        python -m pip install --upgrade pip build
+        python -m build --wheel
+
+    - name: Verify distribution includes installable integration packages
+      run: |
+        python - <<'PY'
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        wheels = list(Path("dist").glob("*.whl"))
+        assert len(wheels) == 1, f"Expected one wheel, found {len(wheels)}"
+        required = {
+            "lrs/cli.py",
+            "lrs/autonomous/__init__.py",
+            "lrs/benchmarking/__init__.py",
+            "lrs/cognitive/__init__.py",
+            "lrs/opencode/__init__.py",
+            "lrs/neuralblitz_integration/messaging.py",
+            "lrs/integration/tui/__init__.py",
+        }
+        with ZipFile(wheels[0]) as wheel:
+            names = wheel.namelist()
+            missing = required.difference(names)
+            entry_points = [p for p in names if p.endswith(".dist-info/entry_points.txt")]
+            assert len(entry_points) == 1, "Expected console script entry point metadata"
+            scripts = wheel.read(entry_points[0]).decode("utf-8")
+            assert "lrs = lrs.cli:main" in scripts
+            assert "lrs-agents = lrs.cli:main" in scripts
+        assert not missing, f"Wheel is missing LRS modules: {sorted(missing)}"
+        PY
+
+    - name: Smoke-test wheel installation
+      run: |
+        python -m pip install --force-reinstall dist/*.whl
+        python - <<'PY'
+        from importlib.metadata import distribution
+
+        files = {str(p) for p in distribution("lrs-agents").files}
+        assert "lrs/neuralblitz_integration/messaging.py" in files
+        assert "lrs/benchmarking/__init__.py" in files
+        PY
+        cd /tmp
+        python -I -c "import lrs.neuralblitz_integration.messaging; import lrs.inference.evaluator; print('Installed package imports succeeded')"
 
   lint:
     runs-on: ubuntu-latest
@@ -52,13 +112,30 @@ jobs:
         python -m pip install --upgrade pip
         pip install ruff black
     
+    - name: Enforce critical Python correctness rules
+      # Existing style debt is tracked separately. These rules should remain blocking.
+      run: ruff check lrs tests --select E9,E722,F821,F822,F823
+
     - name: Run ruff
+      id: ruff
       run: ruff check lrs tests
       continue-on-error: true
     
     - name: Run black
+      id: black
       run: black --check lrs tests
       continue-on-error: true
+
+    - name: Record lint baseline
+      if: always()
+      env:
+        RUFF_OUTCOME: ${{ steps.ruff.outcome }}
+        BLACK_OUTCOME: ${{ steps.black.outcome }}
+      run: |
+        echo '## Non-blocking lint baseline' >> "$GITHUB_STEP_SUMMARY"
+        echo "- Ruff: ${RUFF_OUTCOME}" >> "$GITHUB_STEP_SUMMARY"
+        echo "- Black: ${BLACK_OUTCOME}" >> "$GITHUB_STEP_SUMMARY"
+        echo 'Lint failures remain non-blocking until the baseline is remediated.' >> "$GITHUB_STEP_SUMMARY"
 
   docs:
     runs-on: ubuntu-latest

@@ -5,6 +5,7 @@ Tests for Chaos Scriptorium benchmark.
 import pytest
 import tempfile
 import os
+import random
 from pathlib import Path
 
 from lrs.benchmarks.chaos_scriptorium import (
@@ -138,8 +139,10 @@ class TestChaosTools:
             # Should succeed most of the time when unlocked
             assert successes >= 7
     
-    def test_shell_tool_often_fails_when_locked(self):
-        """Test ShellTool often fails when locked"""
+    def test_shell_tool_often_fails_when_locked(self, monkeypatch):
+        """Test ShellTool failure rate with a reproducible random stream."""
+        rng = random.Random(42)
+        monkeypatch.setattr("lrs.benchmarks.chaos_scriptorium.random.random", rng.random)
         with tempfile.TemporaryDirectory() as tmpdir:
             env = ChaosEnvironment(root_dir=tmpdir)
             env.setup()
@@ -157,8 +160,10 @@ class TestChaosTools:
             # Should fail often when locked
             assert failures >= 4
     
-    def test_python_tool_more_resilient_than_shell(self):
-        """Test PythonTool is more resilient when locked"""
+    def test_python_tool_more_resilient_than_shell(self, monkeypatch):
+        """Test relative resilience with a reproducible random stream."""
+        rng = random.Random(42)
+        monkeypatch.setattr("lrs.benchmarks.chaos_scriptorium.random.random", rng.random)
         with tempfile.TemporaryDirectory() as tmpdir:
             env = ChaosEnvironment(root_dir=tmpdir)
             env.setup()

@@ -46,8 +46,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Import existing cognitive and AI systems
 try:
-    from lrs_agents.lrs.cognitive.cognitive_integration_demo import CognitiveAnalyzer
-    from lrs_agents.lrs.cognitive.multi_agent_coordination import MultiAgentCoordinator
+    from lrs.cognitive.cognitive_integration_demo import CognitiveAnalyzer
+    from lrs.cognitive.multi_agent_coordination import MultiAgentCoordinator
 
     COGNITIVE_AVAILABLE = True
 except ImportError:
@@ -1205,8 +1205,9 @@ class AutonomousCodeGenerator:
         if COGNITIVE_AVAILABLE:
             try:
                 self.cognitive_coordinator = MultiAgentCoordinator()
-            except:
-                pass
+            except (ImportError, RuntimeError, ValueError):
+                # Optional cognitive coordinator initialization can fail.
+                self.cognitive_coordinator = None
 
     async def generate_from_description(self, description: str) -> Dict[str, Any]:
         """Generate complete application from natural language description."""

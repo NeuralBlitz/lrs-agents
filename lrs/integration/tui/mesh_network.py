@@ -273,7 +273,8 @@ class DistributedMeshNetwork:
             try:
                 writer.close()
                 await writer.wait_closed()
-            except:
+            except (OSError, RuntimeError):
+                # Connection teardown must not hide task cancellation.
                 pass
 
         # Cancel background tasks

@@ -76,9 +76,9 @@ Traditional AI agents struggle when tools fail - they either give up or require 
 - 🎯 Optimal exploration-exploitation trade-off
 - 🔬 Grounded in neuroscience and Bayesian inference
 
-### **Production Ready**
+### **Engineering status**
 
-- 🚀 Battle-tested with 95%+ test coverage
+- 🧪 Automated tests and coverage reporting are available in GitHub Actions; coverage and production readiness must be established from current CI results rather than an unsupported 95%+ claim
 - 🔌 Integrates with LangChain, OpenAI, AutoGPT
 - 📈 Scales to production (Docker, Kubernetes)
 - 📝 Comprehensive documentation

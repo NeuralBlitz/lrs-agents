@@ -130,14 +130,11 @@ class ChaosEnvironment:
 
     def _set_permissions(self, readable: bool):
         """Set file permissions"""
-        if readable:
-            # Make readable
-            os.chmod(self.vault_dir, 0o755)
-            os.chmod(self.key_path, 0o644)
-        else:
-            # Make locked (no read permission)
-            os.chmod(self.vault_dir, 0o000)
-            os.chmod(self.key_path, 0o000)
+        # Keep the containing directory searchable so that tests and cleanup
+        # can reach the key even after a simulated lock. Restrict access to
+        # the key itself; FileReadTool also enforces the locked state.
+        os.chmod(self.vault_dir, 0o755)
+        os.chmod(self.key_path, 0o644 if readable else 0o000)
 
     def is_locked(self) -> bool:
         """Check if files are currently locked"""
@@ -157,7 +154,7 @@ class ChaosEnvironment:
         """Remove temporary directory"""
         try:
             shutil.rmtree(self.root_dir)
-        except:
+        except OSError:
             pass
 
 
@@ -523,8 +520,8 @@ if __name__ == "__main__":
         from langchain_anthropic import ChatAnthropic
 
         llm = ChatAnthropic(model="claude-sonnet-4-20250514")
-    except:
-        print("Error: Install langchain-anthropic to run benchmark")
+    except (ImportError, ValueError, OSError):
+        print("Error: Cannot initialize Anthropic client; check installation and configuration")
         sys.exit(1)
 
     # Run benchmark

@@ -470,9 +470,9 @@ class GAIABenchmark:
             exp_num = float(expected)
             
             # Within 1% tolerance
-            if abs(pred_num - exp_num) / abs(exp_num) < 0.01:
+            if abs(pred_num - exp_num) <= max(0.01 * abs(exp_num), 1e-9):
                 return True
-        except:
+        except (ValueError, TypeError, OverflowError):
             pass
         
         # Substring match (predicted contains expected)
@@ -564,8 +564,8 @@ if __name__ == "__main__":
     try:
         from langchain_anthropic import ChatAnthropic
         llm = ChatAnthropic(model="claude-sonnet-4-20250514")
-    except:
-        print("Error: Install langchain-anthropic to run benchmark")
+    except (ImportError, ValueError, OSError):
+        print("Error: Cannot initialize Anthropic client; check installation and configuration")
         sys.exit(1)
     
     benchmark = GAIABenchmark(llm)

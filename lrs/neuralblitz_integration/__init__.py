@@ -10,7 +10,8 @@ Architecture Overview:
 - Bridge: Unified messaging, shared state, real-time synchronization
 """
 
-from .bridge import LRSNeuralBlitzBridge
+# A high-level bridge class is not implemented in this package yet.
+# Export only importable modules so messaging and protocols remain usable.
 from .messaging import UnifiedMessageBus, MessageType, Message
 from .shared_state import SharedStateManager, UnifiedState
 from .protocols import (
@@ -27,7 +28,6 @@ from .adapters import (
 
 __version__ = "1.0.0"
 __all__ = [
-    "LRSNeuralBlitzBridge",
     "UnifiedMessageBus",
     "MessageType",
     "Message",

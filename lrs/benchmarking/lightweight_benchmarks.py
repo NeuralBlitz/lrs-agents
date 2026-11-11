@@ -44,6 +44,10 @@ class LightweightChaosEnvironment:
         if root_dir is None:
             root_dir = tempfile.mkdtemp(prefix="lightweight_chaos_")
 
+        if chaos_interval < 1:
+            raise ValueError("chaos_interval must be a positive integer")
+        if not 0.0 <= lock_probability <= 1.0:
+            raise ValueError("lock_probability must be in [0, 1]")
         self.root_dir = root_dir
         self.chaos_interval = chaos_interval
         self.lock_probability = lock_probability
@@ -92,12 +96,10 @@ class LightweightChaosEnvironment:
 
     def _set_permissions(self, readable: bool):
         """Set file permissions"""
-        if readable:
-            os.chmod(self.vault_dir, 0o755)
-            os.chmod(self.key_path, 0o644)
-        else:
-            os.chmod(self.vault_dir, 0o000)
-            os.chmod(self.key_path, 0o000)
+        # Keep the containing directory traversable so the key can be
+        # restored and benchmark cleanup can reach the file after a lock.
+        os.chmod(self.vault_dir, 0o755)
+        os.chmod(self.key_path, 0o644 if readable else 0o000)
 
     def is_locked(self) -> bool:
         """Check if files are locked"""
@@ -112,6 +114,10 @@ class LightweightChaosEnvironment:
     def cleanup(self):
         """Remove temporary directory"""
         try:
+            # Reopen a locked key before cleanup on platforms with strict
+            # read-only file deletion behavior.
+            if os.path.exists(self.key_path):
+                self._set_permissions(readable=True)
             shutil.rmtree(self.root_dir)
         except OSError:
             pass

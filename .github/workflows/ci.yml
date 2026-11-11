@@ -70,7 +70,13 @@ jobs:
             "lrs/integration/tui/__init__.py",
         }
         with ZipFile(wheels[0]) as wheel:
-            missing = required.difference(wheel.namelist())
+            names = wheel.namelist()
+            missing = required.difference(names)
+            entry_points = [p for p in names if p.endswith(".dist-info/entry_points.txt")]
+            assert len(entry_points) == 1, "Expected console script entry point metadata"
+            scripts = wheel.read(entry_points[0]).decode("utf-8")
+            assert "lrs = lrs.cli:main" in scripts
+            assert "lrs-agents = lrs.cli:main" in scripts
         assert not missing, f"Wheel is missing LRS modules: {sorted(missing)}"
         PY
 

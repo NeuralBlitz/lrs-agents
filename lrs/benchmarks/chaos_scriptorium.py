@@ -154,7 +154,7 @@ class ChaosEnvironment:
         """Remove temporary directory"""
         try:
             shutil.rmtree(self.root_dir)
-        except:
+        except OSError:
             pass
 
 
@@ -520,8 +520,8 @@ if __name__ == "__main__":
         from langchain_anthropic import ChatAnthropic
 
         llm = ChatAnthropic(model="claude-sonnet-4-20250514")
-    except:
-        print("Error: Install langchain-anthropic to run benchmark")
+    except (ImportError, ValueError, OSError):
+        print("Error: Cannot initialize Anthropic client; check installation and configuration")
         sys.exit(1)
 
     # Run benchmark

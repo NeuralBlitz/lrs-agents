@@ -234,7 +234,7 @@ class OptimizedActiveInferenceAnalyzer(ActiveInferenceAnalyzer):
                     "extension": filepath.suffix,
                     "content": content,  # For complexity analysis
                 }
-            except:
+            except (OSError, UnicodeError, ValueError):
                 return None
 
         # Submit all file processing tasks

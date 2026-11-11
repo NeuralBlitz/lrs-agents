@@ -30,6 +30,15 @@ def test_cache_rejects_pickle_globals_in_index(tmp_path):
     assert cache.get("missing", {}) is None
 
 
+def test_cache_rejects_malformed_index_data(tmp_path):
+    index = {"invalid": {"operation": "analyze"}}
+    (tmp_path / "cache_index.pkl").write_bytes(pickle.dumps(index))
+
+    cache = LRSCache(cache_dir=str(tmp_path))
+
+    assert cache._cache_index == {}
+
+
 def test_cache_rejects_pickle_globals_in_entry(tmp_path):
     cache = LRSCache(cache_dir=str(tmp_path))
     params = {"path": "example"}
